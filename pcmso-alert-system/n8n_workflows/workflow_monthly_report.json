@@ -1,0 +1,38 @@
+{
+  "name": "PCMSO - Relatório Mensal",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "0 8 1 * *" }] }
+      },
+      "id": "cron-monthly",
+      "name": "Cron Dia 1 às 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5000/api/relatorio-mensal",
+        "method": "GET",
+        "responseFormat": "json"
+      },
+      "id": "http-relatorio",
+      "name": "Gerar Relatório Mensal",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nreturn [{ json: { mensagem: `Relatório ${r.mes}: ${r.empresas_processadas} empresa(s) processada(s).` } }];"
+      },
+      "id": "fn-log",
+      "name": "Log Resultado",
+      "type": "n8n-nodes-base.code",
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Cron Dia 1 às 08:00": { "main": [[{ "node": "Gerar Relatório Mensal", "type": "main", "index": 0 }]] },
+    "Gerar Relatório Mensal": { "main": [[{ "node": "Log Resultado", "type": "main", "index": 0 }]] }
+  }
+}

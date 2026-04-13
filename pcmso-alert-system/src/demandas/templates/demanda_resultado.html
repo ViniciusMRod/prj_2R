@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Demanda Criada — PCMSO Alert System{% endblock %}
+{% block content %}
+<div class="pcmso-header">
+    <h4 class="mb-1"><i class="bi bi-check-circle me-2"></i>Demanda Criada com Sucesso</h4>
+    <small>Demanda #{{ demanda.id }} — {{ demanda.tipo_movimentacao.value | title }}</small>
+</div>
+
+{% if aviso_sem_mapeamento %}
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+    <strong>Atenção:</strong> Nenhum exame foi gerado automaticamente pois o cargo
+    <strong>{{ demanda.cargo }}</strong> não possui mapeamento de exames cadastrado para esta empresa.
+    Verifique o PCMSO da empresa ou adicione os exames manualmente.
+</div>
+{% endif %}
+
+<div class="alert alert-success">
+    <i class="bi bi-check-circle-fill me-2"></i>{{ mensagem }}
+</div>
+
+<div class="row g-3">
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header fw-bold">Resumo da Demanda</div>
+            <div class="card-body">
+                <table class="table table-sm mb-0">
+                    <tr><th>Colaborador</th><td>{{ demanda.colaborador.nome_completo }}</td></tr>
+                    <tr><th>CPF</th><td>{{ demanda.colaborador.cpf }}</td></tr>
+                    <tr><th>Empresa</th><td>{{ demanda.empresa.razao_social }}</td></tr>
+                    <tr><th>Cargo</th><td>{{ demanda.cargo }}</td></tr>
+                    <tr><th>Tipo</th><td><span class="badge bg-primary">{{ demanda.tipo_movimentacao.value | title }}</span></td></tr>
+                    <tr><th>Prazo</th><td><strong>{{ demanda.data_prazo.strftime('%d/%m/%Y') if demanda.data_prazo else '—' }}</strong></td></tr>
+                    <tr><th>Técnico</th><td>{{ demanda.tecnico_responsavel or '—' }}</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header fw-bold">
+                Exames Gerados
+                <span class="badge bg-secondary ms-2">{{ exames_criados | length }}</span>
+            </div>
+            <div class="card-body p-0">
+                {% if exames_criados %}
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>Tipo de Exame</th><th>Data Prevista</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for ex in exames_criados %}
+                        <tr>
+                            <td>{{ ex.tipo_exame.nome }}</td>
+                            <td><strong>{{ ex.data_proximo_exame.strftime('%d/%m/%Y') }}</strong></td>
+                            <td><span class="badge bg-warning text-dark">Pendente</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted p-3 mb-0">Nenhum exame gerado automaticamente.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-3 d-flex gap-2">
+    <a href="/demandas/nova" class="btn btn-primary">
+        <i class="bi bi-plus-circle me-1"></i>Nova Demanda
+    </a>
+    <a href="/demandas/" class="btn btn-outline-secondary">
+        <i class="bi bi-list-check me-1"></i>Ver Todas as Demandas
+    </a>
+</div>
+{% endblock %}

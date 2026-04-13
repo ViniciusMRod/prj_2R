@@ -1,0 +1,35 @@
+wing: prj_2r
+rooms:
+- name: imagens
+  description: Files from IMAGENS/
+  keywords:
+  - imagens
+  - imagens
+- name: pcmso
+  description: Files from PCMSO/
+  keywords:
+  - pcmso
+  - pcmso
+- name: pcmso_alert_system
+  description: Files from pcmso-alert-system/
+  keywords:
+  - pcmso_alert_system
+  - pcmso-alert-system
+- name: configuration
+  description: Files from config/
+  keywords:
+  - configuration
+  - config
+- name: scripts
+  description: Files from scripts/
+  keywords:
+  - scripts
+  - scripts
+- name: testing
+  description: Files from tests/
+  keywords:
+  - testing
+  - tests
+- name: general
+  description: Files that don't fit other rooms
+  keywords: []

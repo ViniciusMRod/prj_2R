@@ -1,0 +1,62 @@
+{
+  "name": "PCMSO - Alertas Diários",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "0 5 * * *" }] }
+      },
+      "id": "cron-daily",
+      "name": "Cron 05:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5000/api/processar-alertas",
+        "method": "POST",
+        "responseFormat": "json"
+      },
+      "id": "http-alertas",
+      "name": "Processar Alertas",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [{ "value1": "={{ $json.alertas_enviados }}", "operation": "larger", "value2": 0 }]
+        }
+      },
+      "id": "if-alertas",
+      "name": "Há alertas?",
+      "type": "n8n-nodes-base.if",
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { mensagem: `Alertas concluídos: ${$input.first().json.alertas_enviados} enviados, ${$input.first().json.alertas_falhos} falhos. Empresas: ${$input.first().json.empresas_notificadas}.` } }];"
+      },
+      "id": "fn-log",
+      "name": "Log Resultado",
+      "type": "n8n-nodes-base.code",
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { mensagem: 'Nenhum exame vencendo nos próximos 10-15 dias.' } }];"
+      },
+      "id": "fn-noop",
+      "name": "Sem alertas",
+      "type": "n8n-nodes-base.code",
+      "position": [900, 480]
+    }
+  ],
+  "connections": {
+    "Cron 05:00":        { "main": [[{ "node": "Processar Alertas", "type": "main", "index": 0 }]] },
+    "Processar Alertas": { "main": [[{ "node": "Há alertas?",       "type": "main", "index": 0 }]] },
+    "Há alertas?":       { "main": [
+      [{ "node": "Log Resultado", "type": "main", "index": 0 }],
+      [{ "node": "Sem alertas",   "type": "main", "index": 0 }]
+    ]}
+  }
+}

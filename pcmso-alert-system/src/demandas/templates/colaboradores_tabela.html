@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}Colaboradores — PCMSO Alert System{% endblock %}
+
+{% block content %}
+<div class="pcmso-header">
+    <h4 class="mb-1"><i class="bi bi-person-lines-fill me-2"></i>Gestão de Colaboradores</h4>
+    <small>Adicione, edite ou inative colaboradores diretamente na tabela</small>
+</div>
+
+<!-- Filtro por empresa -->
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="GET" class="row g-2 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label mb-1">Empresa</label>
+                <select name="empresa_id" class="form-select" onchange="this.form.submit()">
+                    <option value="">— Selecione uma empresa —</option>
+                    {% for emp in empresas %}
+                    <option value="{{ emp.id }}" {{ 'selected' if emp.id == empresa_id_selecionada }}>
+                        {{ emp.razao_social }} ({{ emp.cnpj }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if empresa_id_selecionada %}
+            <div class="col-auto">
+                <button type="button" class="btn btn-success" onclick="adicionarLinha()">
+                    <i class="bi bi-plus-circle me-1"></i>Novo Colaborador
+                </button>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+{% if empresa_id_selecionada %}
+<div class="card">
+    <div class="card-body p-0">
+        <div id="mensagem-feedback" class="px-3 pt-2" style="display:none;"></div>
+        <table class="table table-hover mb-0" id="tabela-colaboradores">
+            <thead>
+                <tr>
+                    <th>Nome Completo</th>
+                    <th>CPF</th>
+                    <th>Cargo</th>
+                    <th>Setor</th>
+                    <th>Admissão</th>
+                    <th>Situação</th>
+                    <th style="width:140px">Ações</th>
+                </tr>
+            </thead>
+            <tbody id="tbody-colaboradores">
+                {% for col in colaboradores %}
+                <tr id="linha-{{ col.id }}" class="{{ '' if col.ativo else 'table-secondary text-muted' }}">
+                    <td>
+                        <input type="text" class="form-control form-control-sm" id="nome-{{ col.id }}"
+                            value="{{ col.nome_completo }}" {{ 'disabled' if not col.ativo }}>
+                    </td>
+                    <td>
+                        <input type="text" class="form-control form-control-sm" value="{{ col.cpf }}" disabled
+                            title="CPF não pode ser alterado após cadastro">
+                    </td>
+                    <td>
+                        <input type="text" class="form-control form-control-sm" id="cargo-{{ col.id }}"
+                            value="{{ col.cargo or '' }}" {{ 'disabled' if not col.ativo }}>
+                    </td>
+                    <td>
+                        <input type="text" class="form-control form-control-sm" id="setor-{{ col.id }}"
+                            value="{{ col.setor or '' }}" {{ 'disabled' if not col.ativo }}>
+                    </td>
+                    <td>{{ col.data_admissao.strftime('%d/%m/%Y') if col.data_admissao else '—' }}</td>
+                    <td>
+                        {% if col.ativo %}
+                            <span class="badge bg-success">Ativo</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Inativo</span>
+                            {% if col.data_demissao %}
+                            <br><small>{{ col.data_demissao.strftime('%d/%m/%Y') }}</small>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if col.ativo %}
+                        <button class="btn btn-sm btn-primary me-1" onclick="salvarColaborador({{ col.id }})"
+                            title="Salvar alterações">
+                            <i class="bi bi-floppy"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="demitirColaborador({{ col.id }}, '{{ col.nome_completo }}')"
+                            title="Inativar (demissão)">
+                            <i class="bi bi-person-dash"></i>
+                        </button>
+                        {% else %}
+                        <span class="text-muted small">Inativo</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Linha de novo colaborador (oculta por padrão) -->
+<div id="painel-novo" class="card mt-3" style="display:none; border: 2px solid #27ae60;">
+    <div class="card-header bg-success text-white fw-bold">
+        <i class="bi bi-person-plus me-2"></i>Cadastrar Novo Colaborador (Admissional)
+    </div>
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-md-4">
+                <label class="form-label">Nome Completo *</label>
+                <input type="text" class="form-control" id="novo-nome" placeholder="Nome completo">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">CPF *</label>
+                <input type="text" class="form-control" id="novo-cpf" placeholder="000.000.000-00"
+                    oninput="this.value=formatarCPF(this.value)">
+                <div id="cpf-feedback" class="form-text"></div>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Cargo *</label>
+                <input type="text" class="form-control" id="novo-cargo" placeholder="Ex: Operador de Máquinas">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Setor</label>
+                <input type="text" class="form-control" id="novo-setor" placeholder="Ex: Produção">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Data de Admissão</label>
+                <input type="date" class="form-control" id="novo-admissao">
+            </div>
+        </div>
+        <div class="mt-3 d-flex gap-2">
+            <button class="btn btn-success" onclick="salvarNovoColaborador()">
+                <i class="bi bi-floppy me-1"></i>Salvar
+            </button>
+            <button class="btn btn-outline-secondary" onclick="cancelarNovo()">
+                Cancelar
+            </button>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle me-2"></i>Selecione uma empresa para visualizar e gerenciar os colaboradores.
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const EMPRESA_ID = {{ empresa_id_selecionada or 'null' }};
+
+function mostrarFeedback(msg, tipo) {
+    const el = document.getElementById('mensagem-feedback');
+    el.innerHTML = `<div class="alert alert-${tipo} alert-dismissible py-2">
+        ${msg} <button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+function adicionarLinha() {
+    document.getElementById('painel-novo').style.display = 'block';
+    document.getElementById('novo-nome').focus();
+}
+
+function cancelarNovo() {
+    document.getElementById('painel-novo').style.display = 'none';
+    ['novo-nome','novo-cpf','novo-cargo','novo-setor','novo-admissao'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+}
+
+function formatarCPF(v) {
+    v = v.replace(/\D/g, '').slice(0,11);
+    if (v.length >= 10) return v.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');
+    if (v.length >= 7) return v.replace(/(\d{3})(\d{3})(\d+)/,'$1.$2.$3');
+    if (v.length >= 4) return v.replace(/(\d{3})(\d+)/,'$1.$2');
+    return v;
+}
+
+async function salvarNovoColaborador() {
+    const nome = document.getElementById('novo-nome').value.trim();
+    const cpf  = document.getElementById('novo-cpf').value.trim();
+    const cargo = document.getElementById('novo-cargo').value.trim();
+    const setor = document.getElementById('novo-setor').value.trim();
+    const admissao = document.getElementById('novo-admissao').value;
+
+    if (!nome || !cpf || !cargo) {
+        mostrarFeedback('⚠️ Nome, CPF e Cargo são obrigatórios.', 'warning');
+        return;
+    }
+
+    const body = new FormData();
+    body.append('empresa_id', EMPRESA_ID);
+    body.append('nome_completo', nome);
+    body.append('cpf', cpf);
+    body.append('cargo', cargo);
+    body.append('setor', setor);
+    if (admissao) body.append('data_admissao', admissao);
+
+    const res = await fetch('/colaboradores/', { method: 'POST', body });
+    const data = await res.json();
+
+    if (data.ok) {
+        mostrarFeedback(`✅ ${data.mensagem}`, 'success');
+        cancelarNovo();
+        setTimeout(() => location.reload(), 1500);
+    } else {
+        mostrarFeedback(`❌ ${data.erro}`, 'danger');
+    }
+}
+
+async function salvarColaborador(id) {
+    const nome = document.getElementById(`nome-${id}`).value.trim();
+    const cargo = document.getElementById(`cargo-${id}`).value.trim();
+    const setor = document.getElementById(`setor-${id}`).value.trim();
+
+    const body = new FormData();
+    body.append('nome_completo', nome);
+    body.append('cargo', cargo);
+    body.append('setor', setor);
+
+    const res = await fetch(`/colaboradores/${id}`, { method: 'PUT', body });
+    const data = await res.json();
+
+    mostrarFeedback(data.ok ? `✅ ${data.mensagem}` : `❌ ${data.erro}`, data.ok ? 'success' : 'danger');
+}
+
+async function demitirColaborador(id, nome) {
+    if (!confirm(`Confirma a inativação (demissão) de "${nome}"?\n\nO registro será mantido no histórico.`)) return;
+
+    const res = await fetch(`/colaboradores/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+
+    if (data.ok) {
+        mostrarFeedback(`✅ ${data.mensagem}`, 'success');
+        setTimeout(() => location.reload(), 1500);
+    } else {
+        mostrarFeedback(`❌ ${data.erro}`, 'danger');
+    }
+}
+</script>
+{% endblock %}

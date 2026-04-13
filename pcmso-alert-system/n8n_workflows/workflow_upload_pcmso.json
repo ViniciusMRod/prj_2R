@@ -1,0 +1,92 @@
+{
+  "name": "PCMSO - Upload e Extração",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "data/pcmso_raw/",
+        "events": ["add"],
+        "options": { "filter": "*.pdf" }
+      },
+      "id": "watch-folder",
+      "name": "Watch Folder pcmso_raw",
+      "type": "n8n-nodes-base.localFileTrigger",
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5000/api/extrair-pcmso",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [{ "name": "filename", "value": "={{ $json.fileName }}" }]
+        },
+        "responseFormat": "json"
+      },
+      "id": "http-extrair",
+      "name": "Extrair PCMSO",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [{ "value1": "={{ $json.ok }}", "value2": true }]
+        }
+      },
+      "id": "if-ok",
+      "name": "Extração OK?",
+      "type": "n8n-nodes-base.if",
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [{ "value1": "={{ $json.duplicata }}", "value2": true }]
+        }
+      },
+      "id": "if-dup",
+      "name": "É duplicata?",
+      "type": "n8n-nodes-base.if",
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Notificar técnico sobre nova validação pendente\nreturn [{ json: { tipo: 'novo_pcmso', validacao_id: $input.first().json.validacao_id, colaboradores: $input.first().json.colaboradores, exames: $input.first().json.exames } }];"
+      },
+      "id": "fn-notif-novo",
+      "name": "Notificar - Novo PCMSO",
+      "type": "n8n-nodes-base.code",
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { tipo: 'duplicata', mensagem: $input.first().json.mensagem } }];"
+      },
+      "id": "fn-notif-dup",
+      "name": "Notificar - Duplicata",
+      "type": "n8n-nodes-base.code",
+      "position": [1120, 120]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { tipo: 'erro', mensagem: $input.first().json.erro } }];"
+      },
+      "id": "fn-erro",
+      "name": "Log Erro",
+      "type": "n8n-nodes-base.code",
+      "position": [900, 500]
+    }
+  ],
+  "connections": {
+    "Watch Folder pcmso_raw": { "main": [[{ "node": "Extrair PCMSO",   "type": "main", "index": 0 }]] },
+    "Extrair PCMSO":          { "main": [[{ "node": "Extração OK?",    "type": "main", "index": 0 }]] },
+    "Extração OK?":           { "main": [
+      [{ "node": "É duplicata?",        "type": "main", "index": 0 }],
+      [{ "node": "Log Erro",            "type": "main", "index": 0 }]
+    ]},
+    "É duplicata?":           { "main": [
+      [{ "node": "Notificar - Duplicata", "type": "main", "index": 0 }],
+      [{ "node": "Notificar - Novo PCMSO","type": "main", "index": 0 }]
+    ]}
+  }
+}

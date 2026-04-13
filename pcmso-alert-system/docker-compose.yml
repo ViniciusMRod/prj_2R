@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: pcmso_postgres
+    environment:
+      POSTGRES_DB: pcmso_alerts
+      POSTGRES_USER: pcmso_user
+      POSTGRES_PASSWORD: pcmso_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pcmso_user -d pcmso_alerts"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

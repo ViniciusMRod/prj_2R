@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Validações Pendentes — PCMSO Alert System{% endblock %}
+
+{% block content %}
+<div class="pcmso-header">
+    <h4 class="mb-1"><i class="bi bi-clipboard-check me-2"></i>Fila de Validação Técnica</h4>
+    <small>PCMSOs aguardando revisão e aprovação</small>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-4">
+        <div class="card text-center p-3">
+            <h3 class="text-warning mb-0">{{ pendentes | length }}</h3>
+            <small class="text-muted">Pendentes</small>
+        </div>
+    </div>
+</div>
+
+{% if not pendentes %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle me-2"></i>Nenhum PCMSO aguardando validação no momento.
+</div>
+{% else %}
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Arquivo</th>
+                    <th>Empresa</th>
+                    <th>Data Upload</th>
+                    <th>Colaboradores</th>
+                    <th>Exames</th>
+                    <th>Status</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in pendentes %}
+                <tr>
+                    <td>{{ v.id }}</td>
+                    <td>
+                        <i class="bi bi-file-earmark-pdf text-danger me-1"></i>
+                        {{ v.pcmso_filename }}
+                    </td>
+                    <td>
+                        {% if v.empresa %}
+                            {{ v.empresa.razao_social }}<br>
+                            <small class="text-muted">{{ v.empresa.cnpj }}</small>
+                        {% else %}
+                            <span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Não identificada</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ v.data_upload.strftime('%d/%m/%Y %H:%M') }}</td>
+                    <td>
+                        {% if v.dados_extraidos %}
+                            <span class="badge bg-secondary">
+                                {{ v.dados_extraidos.get('colaboradores', []) | length }}
+                            </span>
+                        {% else %}-{% endif %}
+                    </td>
+                    <td>
+                        {% if v.dados_extraidos %}
+                            <span class="badge bg-secondary">
+                                {{ v.dados_extraidos.get('exames', []) | length }}
+                            </span>
+                        {% else %}-{% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-{{ v.status.value }}">
+                            {{ v.status.value | capitalize }}
+                        </span>
+                    </td>
+                    <td>
+                        <a href="/validacao/{{ v.id }}" class="btn btn-sm btn-primary">
+                            <i class="bi bi-eye"></i> Revisar
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}Validar PCMSO #{{ validacao.id }} — PCMSO Alert System{% endblock %}
+
+{% block content %}
+<div class="pcmso-header">
+    <div class="d-flex justify-content-between align-items-start">
+        <div>
+            <h4 class="mb-1"><i class="bi bi-clipboard-check me-2"></i>Validar PCMSO</h4>
+            <small>{{ validacao.pcmso_filename }} — Upload: {{ validacao.data_upload.strftime('%d/%m/%Y %H:%M') }}</small>
+        </div>
+        <a href="/validacao" class="btn btn-outline-light btn-sm">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+    </div>
+</div>
+
+{% if aviso_duplicata %}
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Aviso de duplicata:</strong> {{ aviso_duplicata }}
+</div>
+{% endif %}
+
+{% if erros_validacao %}
+<div class="alert alert-danger">
+    <strong><i class="bi bi-x-circle me-2"></i>Erros encontrados:</strong>
+    <ul class="mb-0 mt-1">
+        {% for e in erros_validacao %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if avisos_validacao %}
+<div class="alert alert-warning">
+    <strong><i class="bi bi-exclamation-circle me-2"></i>Avisos:</strong>
+    <ul class="mb-0 mt-1">
+        {% for a in avisos_validacao %}<li>{{ a }}</li>{% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<form method="POST" action="/validacao/{{ validacao.id }}/aprovar">
+
+<!-- EMPRESA -->
+<div class="card mb-3">
+    <div class="card-header fw-bold"><i class="bi bi-building me-2"></i>Dados da Empresa</div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">CNPJ</label>
+                <div class="input-group">
+                    <input type="text" name="cnpj" class="form-control"
+                        value="{{ dados.empresa.get('cnpj', '') }}" required>
+                    <span class="input-group-text">
+                        {% if cnpj_valido %}
+                            <i class="bi bi-check-circle-fill validation-ok"></i>
+                        {% else %}
+                            <i class="bi bi-x-circle-fill validation-error"></i>
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label">Razão Social</label>
+                <input type="text" name="razao_social" class="form-control"
+                    value="{{ dados.empresa.get('razao_social', '') }}" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Ano de Referência</label>
+                <input type="number" name="ano_referencia" class="form-control"
+                    value="{{ dados.empresa.get('ano_referencia', '') }}" min="2000" max="2099" required>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label">E-mail SSO</label>
+                <input type="email" name="email_sso" class="form-control"
+                    value="{{ dados.empresa.get('email_sso', '') }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">WhatsApp SSO</label>
+                <input type="text" name="whatsapp_sso" class="form-control"
+                    value="{{ dados.empresa.get('whatsapp_sso', '') }}"
+                    placeholder="+5511999999999">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- COLABORADORES -->
+<div class="card mb-3">
+    <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-people me-2"></i>Colaboradores Encontrados
+            <span class="badge bg-secondary ms-2">{{ dados.colaboradores | length }}</span>
+        </span>
+        {% if colaboradores_invalidos %}
+        <span class="badge bg-danger">
+            <i class="bi bi-exclamation-triangle me-1"></i>{{ colaboradores_invalidos | length }} com erros
+        </span>
+        {% endif %}
+    </div>
+    <div class="card-body p-0">
+        <div style="max-height: 350px; overflow-y: auto;">
+            <table class="table table-sm table-hover mb-0">
+                <thead style="position: sticky; top: 0;">
+                    <tr>
+                        <th>#</th>
+                        <th>Nome Completo</th>
+                        <th>CPF</th>
+                        <th>Cargo</th>
+                        <th>Setor</th>
+                        <th>Admissão</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for col in dados.colaboradores %}
+                    {% set cpf_invalido = col.cpf in cpfs_invalidos %}
+                    <tr class="{{ 'table-warning' if cpf_invalido else '' }}">
+                        <td>{{ loop.index }}</td>
+                        <td>
+                            <input type="text" class="form-control form-control-sm"
+                                name="col_nome_{{ loop.index0 }}"
+                                value="{{ col.nome_completo }}">
+                        </td>
+                        <td>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control form-control-sm"
+                                    name="col_cpf_{{ loop.index0 }}"
+                                    value="{{ col.cpf }}"
+                                    style="min-width:120px">
+                                <span class="input-group-text p-1">
+                                    {% if cpf_invalido %}
+                                        <i class="bi bi-x-circle-fill validation-error" title="CPF inválido"></i>
+                                    {% else %}
+                                        <i class="bi bi-check-circle-fill validation-ok"></i>
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </td>
+                        <td>
+                            <input type="text" class="form-control form-control-sm"
+                                name="col_cargo_{{ loop.index0 }}"
+                                value="{{ col.cargo or '' }}">
+                        </td>
+                        <td>
+                            <input type="text" class="form-control form-control-sm"
+                                name="col_setor_{{ loop.index0 }}"
+                                value="{{ col.setor or '' }}">
+                        </td>
+                        <td>{{ col.data_admissao or '' }}</td>
+                        <td>
+                            {% if cpf_invalido %}
+                                <span class="badge bg-warning text-dark">CPF inválido</span>
+                            {% else %}
+                                <span class="badge bg-success">OK</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <input type="hidden" name="total_colaboradores" value="{{ dados.colaboradores | length }}">
+    </div>
+</div>
+
+<!-- EXAMES -->
+<div class="card mb-3">
+    <div class="card-header fw-bold">
+        <i class="bi bi-heart-pulse me-2"></i>Exames Extraídos
+        <span class="badge bg-secondary ms-2">{{ dados.exames | length }}</span>
+    </div>
+    <div class="card-body p-0">
+        <div style="max-height: 300px; overflow-y: auto;">
+            <table class="table table-sm table-hover mb-0">
+                <thead style="position: sticky; top: 0;">
+                    <tr>
+                        <th>Colaborador</th>
+                        <th>Tipo de Exame</th>
+                        <th>Periodicidade (meses)</th>
+                        <th>Último Exame</th>
+                        <th>Próximo Exame</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ex in dados.exames %}
+                    <tr>
+                        <td>{{ ex.colaborador_nome or '—' }}</td>
+                        <td>{{ ex.tipo_exame }}</td>
+                        <td>
+                            <span class="badge bg-info text-dark">{{ ex.periodicidade_meses or '?' }} m</span>
+                        </td>
+                        <td>{{ ex.data_ultimo_exame or '—' }}</td>
+                        <td>
+                            {% if ex.data_proximo_exame %}
+                                <strong>{{ ex.data_proximo_exame }}</strong>
+                            {% else %}
+                                <span class="text-muted">A calcular</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- MAPEAMENTO CARGO × EXAMES -->
+{% if dados.cargo_exames %}
+<div class="card mb-4">
+    <div class="card-header fw-bold">
+        <i class="bi bi-diagram-3 me-2"></i>Mapeamento Cargo × Exames
+        <span class="badge bg-secondary ms-2">{{ dados.cargo_exames | length }}</span>
+    </div>
+    <div class="card-body p-0">
+        <div style="max-height: 250px; overflow-y: auto;">
+            <table class="table table-sm mb-0">
+                <thead style="position: sticky; top: 0;">
+                    <tr><th>Cargo</th><th>Setor</th><th>Risco</th><th>Exame</th><th>Periodicidade</th></tr>
+                </thead>
+                <tbody>
+                    {% for ce in dados.cargo_exames %}
+                    <tr>
+                        <td>{{ ce.cargo }}</td>
+                        <td>{{ ce.setor or '—' }}</td>
+                        <td>{{ ce.risco or '—' }}</td>
+                        <td>{{ ce.tipo_exame }}</td>
+                        <td>{{ ce.periodicidade_meses or '?' }} m</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- OBSERVAÇÕES -->
+<div class="card mb-4">
+    <div class="card-body">
+        <label class="form-label fw-bold">Observações do Técnico</label>
+        <textarea name="observacoes_tecnico" class="form-control" rows="3"
+            placeholder="Registre aqui observações, correções realizadas ou motivo de rejeição..."></textarea>
+        <input type="hidden" name="validado_por" value="Técnico">
+    </div>
+</div>
+
+<!-- AÇÕES -->
+<div class="d-flex gap-2">
+    <button type="submit" name="acao" value="aprovar" class="btn btn-aprovar btn-lg">
+        <i class="bi bi-check-circle me-2"></i>Aprovar e Importar
+    </button>
+    <button type="submit" name="acao" value="editar_aprovar" class="btn btn-warning btn-lg">
+        <i class="bi bi-pencil-square me-2"></i>Salvar Edições e Aprovar
+    </button>
+</div>
+
+</form>
+
+<form method="POST" action="/validacao/{{ validacao.id }}/rejeitar" class="mt-2">
+    <button type="submit" class="btn btn-rejeitar"
+        onclick="return confirm('Confirma a rejeição deste PCMSO?')">
+        <i class="bi bi-x-circle me-2"></i>Rejeitar
+    </button>
+</form>
+{% endblock %}

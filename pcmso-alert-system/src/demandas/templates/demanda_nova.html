@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}Nova Demanda — PCMSO Alert System{% endblock %}
+
+{% block content %}
+<div class="pcmso-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h4 class="mb-1"><i class="bi bi-plus-circle me-2"></i>Nova Demanda</h4>
+            <small>Selecione a empresa, colaborador, cargo e tipo de movimentação</small>
+        </div>
+        <a href="/demandas/" class="btn btn-outline-light btn-sm">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+    </div>
+</div>
+
+{% if erro %}
+<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>{{ erro }}</div>
+{% endif %}
+
+<form method="POST" action="/demandas/nova" id="form-demanda">
+<div class="row g-3">
+
+    <!-- PASSO 1: Empresa -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header fw-bold">
+                <span class="badge bg-primary me-2">1</span>Empresa
+            </div>
+            <div class="card-body">
+                <select name="empresa_id" id="sel-empresa" class="form-select form-select-lg"
+                    onchange="carregarDadosEmpresa(this.value)" required>
+                    <option value="">— Selecione a empresa —</option>
+                    {% for emp in empresas %}
+                    <option value="{{ emp.id }}" {{ 'selected' if emp.id == empresa_id_selecionada }}>
+                        {{ emp.razao_social }} — {{ emp.cnpj }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- PASSO 2: Tipo de Movimentação -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header fw-bold">
+                <span class="badge bg-primary me-2">2</span>Tipo de Movimentação
+            </div>
+            <div class="card-body">
+                <div class="row g-2" id="tipos-movimentacao">
+                    {% set tipo_labels = {
+                        'admissional': ('success', 'bi-person-plus', 'Admissional', 'Novo colaborador contratado'),
+                        'periodico': ('primary', 'bi-arrow-repeat', 'Periódico', 'Exame de rotina'),
+                        'demissional': ('danger', 'bi-person-dash', 'Demissional', 'Colaborador saindo'),
+                        'retorno': ('warning', 'bi-person-check', 'Retorno', 'Retorno de afastamento'),
+                        'mudanca_funcao': ('info', 'bi-shuffle', 'Mudança de Função', 'Novo cargo/setor')
+                    } %}
+                    {% for tipo in tipos_movimentacao %}
+                    {% set info = tipo_labels.get(tipo, ('secondary', 'bi-circle', tipo, '')) %}
+                    <div class="col-6">
+                        <input type="radio" class="btn-check" name="tipo_movimentacao"
+                            id="tipo-{{ tipo }}" value="{{ tipo }}"
+                            onchange="onTipoMudou('{{ tipo }}')" required>
+                        <label class="btn btn-outline-{{ info[0] }} w-100 text-start p-3" for="tipo-{{ tipo }}">
+                            <i class="bi {{ info[1] }} fs-5 d-block mb-1"></i>
+                            <strong>{{ info[2] }}</strong><br>
+                            <small>{{ info[3] }}</small>
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PASSO 3: Colaborador -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header fw-bold">
+                <span class="badge bg-primary me-2">3</span>Colaborador
+            </div>
+            <div class="card-body">
+                <!-- Colaborador existente -->
+                <div id="bloco-colaborador-existente">
+                    <label class="form-label">Selecionar colaborador existente</label>
+                    <select name="colaborador_id" id="sel-colaborador" class="form-select mb-2">
+                        <option value="">— Selecione —</option>
+                        {% for col in colaboradores %}
+                        <option value="{{ col.id }}" data-cargo="{{ col.cargo or '' }}">
+                            {{ col.nome_completo }} ({{ col.cpf }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <small class="text-muted">Selecione uma empresa primeiro para carregar os colaboradores.</small>
+                </div>
+
+                <!-- Novo colaborador (admissional) -->
+                <div id="bloco-novo-colaborador" style="display:none;">
+                    <div class="alert alert-success py-2 mb-3">
+                        <i class="bi bi-person-plus me-1"></i>Preencha os dados do novo colaborador
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <input type="text" name="novo_nome" class="form-control"
+                                placeholder="Nome completo *" id="input-novo-nome">
+                        </div>
+                        <div class="col-6">
+                            <input type="text" name="novo_cpf" class="form-control"
+                                placeholder="CPF * (000.000.000-00)"
+                                oninput="this.value=formatarCPF(this.value)" id="input-novo-cpf">
+                        </div>
+                        <div class="col-6">
+                            <input type="text" name="novo_setor" class="form-control"
+                                placeholder="Setor">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label mb-0 small">Data de Admissão</label>
+                            <input type="date" name="nova_data_admissao" class="form-control">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PASSO 4: Cargo -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header fw-bold">
+                <span class="badge bg-primary me-2">4</span>Cargo
+            </div>
+            <div class="card-body">
+                <select name="cargo" id="sel-cargo" class="form-select mb-2" required>
+                    <option value="">— Selecione o cargo —</option>
+                    {% for cargo in cargos %}
+                    <option value="{{ cargo }}">{{ cargo }}</option>
+                    {% endfor %}
+                </select>
+                <div id="aviso-sem-cargo" class="alert alert-warning py-2" style="display:none;">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    Nenhum cargo mapeado para esta empresa ainda. O sistema criará a demanda sem exames automáticos.
+                    Você poderá adicioná-los manualmente depois.
+                </div>
+                <small class="text-muted">Apenas cargos com exames mapeados no PCMSO aparecem aqui.</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- PASSO 5: Informações adicionais -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header fw-bold">
+                <span class="badge bg-primary me-2">5</span>Informações Adicionais
+            </div>
+            <div class="card-body">
+                <label class="form-label">Técnico Responsável</label>
+                <input type="text" name="tecnico_responsavel" class="form-control mb-2"
+                    placeholder="Nome do técnico">
+                <label class="form-label">Observações</label>
+                <textarea name="observacoes" class="form-control" rows="3"
+                    placeholder="Informações extras sobre esta demanda..."></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- Botão de envio -->
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary btn-lg px-5">
+            <i class="bi bi-check-circle me-2"></i>Gerar Demanda e Exames
+        </button>
+    </div>
+
+</div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function formatarCPF(v) {
+    v = v.replace(/\D/g, '').slice(0,11);
+    if (v.length >= 10) return v.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');
+    if (v.length >= 7)  return v.replace(/(\d{3})(\d{3})(\d+)/,'$1.$2.$3');
+    if (v.length >= 4)  return v.replace(/(\d{3})(\d+)/,'$1.$2');
+    return v;
+}
+
+function onTipoMudou(tipo) {
+    const blocoExistente = document.getElementById('bloco-colaborador-existente');
+    const blocoNovo      = document.getElementById('bloco-novo-colaborador');
+    const selCol         = document.getElementById('sel-colaborador');
+
+    if (tipo === 'admissional') {
+        blocoExistente.style.display = 'none';
+        blocoNovo.style.display = 'block';
+        selCol.removeAttribute('required');
+        document.getElementById('input-novo-nome').setAttribute('required','');
+        document.getElementById('input-novo-cpf').setAttribute('required','');
+    } else {
+        blocoExistente.style.display = 'block';
+        blocoNovo.style.display = 'none';
+        selCol.setAttribute('required','');
+        document.getElementById('input-novo-nome').removeAttribute('required');
+        document.getElementById('input-novo-cpf').removeAttribute('required');
+    }
+}
+
+async function carregarDadosEmpresa(empresaId) {
+    if (!empresaId) return;
+
+    // Carregar colaboradores
+    const resCol = await fetch(`/demandas/api/colaboradores/${empresaId}`);
+    const dataCol = await resCol.json();
+    const sel = document.getElementById('sel-colaborador');
+    sel.innerHTML = '<option value="">— Selecione —</option>';
+    dataCol.colaboradores.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.dataset.cargo = c.cargo;
+        opt.textContent = `${c.nome} (${c.cpf})`;
+        sel.appendChild(opt);
+    });
+
+    // Carregar cargos
+    const resCargo = await fetch(`/demandas/api/cargos/${empresaId}`);
+    const dataCargo = await resCargo.json();
+    const selCargo = document.getElementById('sel-cargo');
+    selCargo.innerHTML = '<option value="">— Selecione o cargo —</option>';
+
+    if (dataCargo.cargos.length === 0) {
+        document.getElementById('aviso-sem-cargo').style.display = 'block';
+    } else {
+        document.getElementById('aviso-sem-cargo').style.display = 'none';
+        dataCargo.cargos.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c;
+            opt.textContent = c;
+            selCargo.appendChild(opt);
+        });
+    }
+}
+
+// Preenche cargo automaticamente ao selecionar colaborador
+document.getElementById('sel-colaborador').addEventListener('change', function() {
+    const cargo = this.options[this.selectedIndex]?.dataset?.cargo;
+    if (cargo) {
+        const selCargo = document.getElementById('sel-cargo');
+        for (let opt of selCargo.options) {
+            if (opt.value === cargo) { selCargo.value = cargo; break; }
+        }
+    }
+});
+</script>
+{% endblock %}

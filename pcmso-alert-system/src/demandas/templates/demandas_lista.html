@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Demandas — PCMSO Alert System{% endblock %}
+
+{% block content %}
+<div class="pcmso-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h4 class="mb-1"><i class="bi bi-list-check me-2"></i>Demandas de Movimentação</h4>
+            <small>Admissional, periódico, demissional e retornos</small>
+        </div>
+        <a href="/demandas/nova" class="btn btn-success">
+            <i class="bi bi-plus-circle me-1"></i>Nova Demanda
+        </a>
+    </div>
+</div>
+
+<!-- Filtro -->
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="GET" class="row g-2 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label mb-1">Filtrar por Empresa</label>
+                <select name="empresa_id" class="form-select" onchange="this.form.submit()">
+                    <option value="">— Todas as empresas —</option>
+                    {% for emp in empresas %}
+                    <option value="{{ emp.id }}" {{ 'selected' if emp.id == empresa_id_selecionada }}>
+                        {{ emp.razao_social }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if not demandas %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle me-2"></i>Nenhuma demanda ativa no momento.
+    <a href="/demandas/nova" class="alert-link">Criar nova demanda</a>.
+</div>
+{% else %}
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Colaborador</th>
+                    <th>Empresa</th>
+                    <th>Cargo</th>
+                    <th>Tipo</th>
+                    <th>Prazo</th>
+                    <th>Exames</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in demandas %}
+                {% set hoje = today %}
+                {% set vencida = d.data_prazo and d.data_prazo < hoje %}
+                <tr class="{{ 'table-danger' if vencida else '' }}">
+                    <td>{{ d.id }}</td>
+                    <td>
+                        <strong>{{ d.colaborador.nome_completo }}</strong><br>
+                        <small class="text-muted">{{ d.colaborador.cpf }}</small>
+                    </td>
+                    <td>{{ d.empresa.razao_social }}</td>
+                    <td>{{ d.cargo }}</td>
+                    <td>
+                        {% set badge_colors = {
+                            'admissional': 'success',
+                            'periodico': 'primary',
+                            'demissional': 'danger',
+                            'retorno': 'warning',
+                            'mudanca_funcao': 'info'
+                        } %}
+                        <span class="badge bg-{{ badge_colors.get(d.tipo_movimentacao.value, 'secondary') }}">
+                            {{ d.tipo_movimentacao.value | replace('_', ' ') | title }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if d.data_prazo %}
+                            <span class="{{ 'text-danger fw-bold' if vencida else '' }}">
+                                {{ d.data_prazo.strftime('%d/%m/%Y') }}
+                            </span>
+                            {% if vencida %}
+                            <br><small class="text-danger"><i class="bi bi-exclamation-triangle"></i> Vencida</small>
+                            {% endif %}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>
+                        {% if d.exames_gerados %}
+                            <span class="badge bg-secondary">{{ d.exames_gerados | length }}</span>
+                        {% else %}
+                            <span class="text-warning" title="Sem exames mapeados">
+                                <i class="bi bi-exclamation-triangle"></i> 0
+                            </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% set status_colors = {'pendente': 'warning', 'agendado': 'info', 'concluido': 'success', 'cancelado': 'secondary'} %}
+                        <span class="badge bg-{{ status_colors.get(d.status.value, 'secondary') }} text-dark">
+                            {{ d.status.value | capitalize }}
+                        </span>
+                    </td>
+                    <td>
+                        <a href="/demandas/{{ d.id }}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
