@@ -1,0 +1,44 @@
+# Ambiente Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Variáveis de ambiente / segredos
+.env
+*.env
+!*.env.example
+
+# PDFs com dados sensíveis
+*.pdf
+
+# Arquivos de lock do LibreOffice/Excel
+.~lock.*
+
+# Outputs gerados
+*.xlsx
+*.csv
+*.json
+!pcmso-alert-system/n8n_workflows/*.json
+!entities.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+ERROR_start.txt
