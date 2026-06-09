@@ -37,9 +37,11 @@ def main() -> None:
     dados = extrair_pcmso(filepath)
 
     print(f"Hash: {dados['hash'][:16]}...")
-    print(f"Empresa: {dados['empresa']}")
-    print(f"Colaboradores: {len(dados['colaboradores'])}")
-    print(f"Exames: {len(dados['exames'])}")
+    empresa = dados['empresa']
+    print(f"Empresa: {empresa.get('razao_social', '')} | CNPJ: {empresa.get('cnpj', '')}")
+    print(f"Cargos: {len(dados['cargos'])}")
+    print(f"Riscos: {len(dados['riscos'])}")
+    print(f"Exames (PCMSO): {len(dados['exames'])}")
     print(f"Mapeamentos cargo-exame: {len(dados['cargo_exames'])}")
 
     resultado = validar_dados_extraidos(dados)
@@ -48,9 +50,6 @@ def main() -> None:
         print(f"  ❌ {e}")
     for a in resultado["avisos"]:
         print(f"  ⚠️  {a}")
-    if resultado["colaboradores_invalidos"]:
-        print(f"  ⚠️  {len(resultado['colaboradores_invalidos'])} CPF(s) inválido(s)")
-
     # Salvar JSON
     json_path = filepath.parent / f"{filepath.stem}_extraido.json"
     salvar_json_extracao(dados, json_path)

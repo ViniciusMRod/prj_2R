@@ -67,8 +67,9 @@ Seis abas, uma por domínio:
 | **Cargos** | arquivo, razao_social, setor, cargo, quantidade |
 | **Riscos** | arquivo, razao_social, tipo_risco, descricao_risco, danos_saude |
 | **Exames** | arquivo, razao_social, exame, periodicidade |
-| **Colaboradores** | arquivo, razao_social, nome_completo, cpf, cargo, setor, data_admissao |
 | **Cargo_Exames** | arquivo, razao_social, cargo, setor, risco, tipo_exame, periodicidade_meses |
+
+> **Nota:** Colaboradores não são extraídos do PCMSO. Chegam via demanda dos técnicos ao longo do tempo e serão tratados em etapa futura.
 
 - Campo `arquivo` em todas as abas permite rastrear qual PDF originou cada linha.
 - Campos não encontrados recebem string vazia (não "N/A") para facilitar edição.
@@ -107,9 +108,6 @@ Após conversão do Excel editado, cada empresa gera um registro:
   ],
   "exames": [
     { "exame": "Audiometria", "periodicidade": "Anual" }
-  ],
-  "colaboradores": [
-    { "nome_completo": "José Silva", "cpf": "12345678900", "cargo": "Motorista", "setor": "Logística", "data_admissao": "2022-03-15" }
   ],
   "cargo_exames": [
     { "cargo": "Motorista", "setor": "Logística", "risco": "MECÂNICO", "tipo_exame": "Acuidade Visual", "periodicidade_meses": 12 }
