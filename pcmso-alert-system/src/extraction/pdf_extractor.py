@@ -1,6 +1,6 @@
 """
 Extrator de dados de PDFs PCMSO.
-Pipeline híbrido: PyPDF2 (texto) + pdfplumber (tabelas) + regex (campos estruturados).
+Pipeline híbrido: pypdf (texto) + pdfplumber (tabelas) + regex (campos estruturados).
 Cobre empresa, cargos, riscos, exames periódicos e mapeamento cargo×exame.
 
 Colaboradores NÃO são extraídos do PCMSO — chegam via demanda dos técnicos.
@@ -16,7 +16,7 @@ from typing import Optional
 
 import pandas as pd
 import pdfplumber
-import PyPDF2
+import pypdf
 
 from src.extraction.duplicate_checker import calcular_hash_arquivo
 from src.extraction.validators import formatar_cnpj, formatar_cpf
@@ -95,7 +95,7 @@ def analisar_pdf(filepath: str | Path) -> dict:
     resultado = {"tipo": "pdf", "paginas": 0, "tabelas": 0, "has_tables": False, "amostra_texto": ""}
 
     with open(filepath, "rb") as f:
-        reader = PyPDF2.PdfReader(f)
+        reader = pypdf.PdfReader(f)
         resultado["paginas"] = len(reader.pages)
         if reader.pages:
             resultado["amostra_texto"] = reader.pages[0].extract_text()[:500] or ""
@@ -117,10 +117,10 @@ def analisar_pdf(filepath: str | Path) -> dict:
 # ---------------------------------------------------------------------------
 
 def extrair_texto_pdf(filepath: str | Path) -> str:
-    """Extrai texto completo do PDF via PyPDF2."""
+    """Extrai texto completo do PDF via pypdf."""
     texto = ""
     with open(filepath, "rb") as f:
-        reader = PyPDF2.PdfReader(f)
+        reader = pypdf.PdfReader(f)
         for page in reader.pages:
             texto += (page.extract_text() or "") + "\n"
     return texto
@@ -232,13 +232,13 @@ def extrair_dados_empresa_por_regex(texto: str) -> dict:
         if match:
             valor = match.group(1).strip()
             if campo == "cnpj":
-                # Remove espaços internos que o PyPDF2 insere (ex: "0001 -36" → "0001-36")
+                # Remove espaços internos que o pypdf insere (ex: "0001 -36" → "0001-36")
                 valor = re.sub(r'\s+', '', valor)
                 valor = formatar_cnpj(valor)
             dados[campo] = valor
 
     # Vigência: página de capa traz "Início da vigência: MM/AAAA" e "Fim da vigência: MM/AAAA"
-    # PyPDF2 pode inserir espaço no ano: "09/202 5" → normalizar para "09/2025"
+    # pypdf pode inserir espaço no ano: "09/202 5" → normalizar para "09/2025"
     # Buscar em todo o texto pois pode estar na página 1 (antes da seção DADOS)
     ini = re.search(PCMSO_PATTERNS["vigencia_inicio"], texto, re.IGNORECASE)
     fim = re.search(PCMSO_PATTERNS["vigencia_fim"], texto, re.IGNORECASE)
@@ -268,7 +268,7 @@ def _extrair_cargos_por_regex(texto: str) -> list[dict]:
     fim = re.search(r"\n\s*\d{2}\s*[–\-]", texto[ini.end():])
     bloco = texto[ini.end(): ini.end() + fim.start()] if fim else texto[ini.end(): ini.end() + 2000]
 
-    # Normaliza espaços extras que o PyPDF2 insere dentro de tokens:
+    # Normaliza espaços extras que o pypdf insere dentro de tokens:
     # "EST 0 001" → "EST 0001", "GERENTE  GERAL" fica como está (dois espaços = separador)
     bloco_norm = re.sub(
         r'\bEST\s+(\d[\d\s]*)',
@@ -598,7 +598,7 @@ def extrair_pcmso(filepath: str | Path) -> dict:
     Pipeline completo de extração de dados de um PCMSO PDF.
 
     Estratégia híbrida:
-    1. Extrai texto completo (PyPDF2) + filtra cabeçalho do prestador
+    1. Extrai texto completo (pypdf) + filtra cabeçalho do prestador
     2. Aplica regex para empresa, cargos, riscos e exames periódicos
     3. Extrai tabelas (pdfplumber) para mapeamento cargo×exame
     4. Deduplica cargos e riscos
