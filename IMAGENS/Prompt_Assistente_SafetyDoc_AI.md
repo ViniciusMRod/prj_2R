@@ -428,7 +428,7 @@ Após configurar o assistente, teste com perguntas variadas e ajuste:
 
 ### Próximos Passos:
 
-1. ✅ Criar planilha Excel com dados reais (rodando o pcmso_extractor.py)
+1. ✅ Criar planilha Excel com dados reais (rodando o extrator `src/extraction/pdf_extractor.py` via API de lote)
 2. ✅ Converter este documento para PDF
 3. ✅ Fazer upload no NotebookLM:
    - Documento do Produto (PDF)

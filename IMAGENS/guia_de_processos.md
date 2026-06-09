@@ -55,13 +55,15 @@ Você tem duas opções:
 
 **Opção A - Rodar o Extrator (RECOMENDADO):**
 
+O extrator oficial é `pcmso-alert-system/src/extraction/pdf_extractor.py`, usado pela API de extração em lote (`src/api`) e pelos scripts do projeto.
+
 1. Certifique-se de ter os PDFs de PCMSO em uma pasta
-2. Coloque o arquivo `pcmso_extractor.py` na mesma pasta
-3. Execute:
+2. A partir de `pcmso-alert-system/`, extraia um PDF individual:
 ```bash
-python pcmso_extractor.py
+python scripts/run_extraction.py caminho/para/PCMSO.pdf
 ```
-4. Isso gerará: `PCMSO_Consolidado.xlsx` com 4 abas
+   Para lote PDF→Excel consolidado, suba a API (`uvicorn src.api.main:app`) e use o endpoint de extração em lote.
+3. A saída traz os dados estruturados (empresa, cargos, riscos, exames, cargo×exame) já com o score de confiança da extração.
 
 **Opção B - Criar Planilha Manualmente (se o extrator falhar):**
 

@@ -3,6 +3,8 @@
 **Data:** 2026-04-13  
 **Escopo:** Etapa de extração — unificação do extrator legado com o alert system, processamento em lote via n8n, saída em Excel para revisão técnica, conversão para JSON e inserção em fila de validação.
 
+> **Status (2026-06-09):** Unificação concluída. O extrator legado (`PCMSO/pcmso_extractor.py`) e as cópias soltas na raiz foram **removidos**; o extrator unificado é o do Alert System (`src/extraction/pdf_extractor.py`), e a extração em lote PDF→Excel é feita pela API (`src/api` + `excel_builder.py`). O contexto abaixo é histórico.
+
 ---
 
 ## 1. Contexto
