@@ -33,6 +33,7 @@
                     <th>Data Upload</th>
                     <th>Colaboradores</th>
                     <th>Exames</th>
+                    <th>Confiança</th>
                     <th>Status</th>
                     <th>Ações</th>
                 </tr>
@@ -65,6 +66,15 @@
                         {% if v.dados_extraidos %}
                             <span class="badge bg-secondary">
                                 {{ v.dados_extraidos.get('exames', []) | length }}
+                            </span>
+                        {% else %}-{% endif %}
+                    </td>
+                    <td>
+                        {% set conf = v.dados_extraidos.get('confianca') if v.dados_extraidos else None %}
+                        {% if conf %}
+                            {% set cor = 'success' if conf.nivel == 'ALTA' else 'warning' if conf.nivel == 'MEDIA' else 'danger' %}
+                            <span class="badge bg-{{ cor }}" title="Score: {{ conf.score_geral }}{% if conf.avisos %} — {{ conf.avisos | join('; ') }}{% endif %}">
+                                {{ conf.nivel }}
                             </span>
                         {% else %}-{% endif %}
                     </td>

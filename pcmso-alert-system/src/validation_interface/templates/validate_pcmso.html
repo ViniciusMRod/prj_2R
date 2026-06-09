@@ -21,6 +21,21 @@
 </div>
 {% endif %}
 
+{% set conf = dados.get('confianca') %}
+{% if conf %}
+{% set cor = 'success' if conf.nivel == 'ALTA' else 'warning' if conf.nivel == 'MEDIA' else 'danger' %}
+<div class="alert alert-{{ cor }}">
+    <strong><i class="bi bi-speedometer2 me-2"></i>Confiança da extração:</strong>
+    <span class="badge bg-{{ cor }}">{{ conf.nivel }}</span>
+    <small class="text-muted ms-1">(score {{ conf.score_geral }})</small>
+    {% if conf.avisos %}
+    <ul class="mb-0 mt-1">
+        {% for a in conf.avisos %}<li>{{ a }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+</div>
+{% endif %}
+
 {% if erros_validacao %}
 <div class="alert alert-danger">
     <strong><i class="bi bi-x-circle me-2"></i>Erros encontrados:</strong>
