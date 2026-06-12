@@ -6,16 +6,41 @@ from __future__ import annotations
 
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from config.database import get_db
+from src.database.models import Empresa
+from src.extraction.duplicate_checker import ResultadoDuplicata, verificar_duplicata
 from src.extraction.pdf_extractor import extrair_pcmso
 from src.extraction.excel_builder import gerar_excel
 
 router = APIRouter(tags=["Extração"])
+
+
+def _classificar_versionamento(db: Session, resultado: dict) -> None:
+    """
+    Pré-checa duplicata/versão para um resultado de extração e grava
+    `status_pcmso` + `mensagem_versao` (consumidos pela aba Metadados).
+    Roda sequencial na thread principal — a sessão SQLAlchemy não é thread-safe.
+    """
+    if not resultado.get("hash"):
+        resultado["status_pcmso"] = "NOVO"
+        return
+
+    empresa_cnpj = (resultado.get("empresa") or {}).get("cnpj", "")
+    empresa = db.scalar(select(Empresa).where(Empresa.cnpj == empresa_cnpj)) if empresa_cnpj else None
+    empresa_id = empresa.id if empresa else None
+    ano = (resultado.get("empresa") or {}).get("ano_referencia", datetime.now().year)
+
+    resultado_dup, _versao, msg = verificar_duplicata(db, resultado["hash"], empresa_id or 0, ano)
+    resultado["status_pcmso"] = resultado_dup.value if hasattr(resultado_dup, "value") else str(resultado_dup)
+    resultado["mensagem_versao"] = msg if resultado_dup != ResultadoDuplicata.NOVO_ARQUIVO else ""
 
 
 def _processar_pdf(upload: UploadFile) -> dict:
@@ -36,7 +61,10 @@ def _processar_pdf(upload: UploadFile) -> dict:
 
 
 @router.post("/extrair-lote", summary="Extrai N PDFs e retorna Excel para revisão")
-async def extrair_lote(files: list[UploadFile] = File(...)):
+async def extrair_lote(
+    files: list[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+):
     """
     Recebe um ou mais PDFs de PCMSO.
     Processa em paralelo (ThreadPoolExecutor) e retorna arquivo .xlsx
@@ -56,6 +84,10 @@ async def extrair_lote(files: list[UploadFile] = File(...)):
                 resultados.append(future.result())
             except Exception as exc:
                 erros_fatais.append({"arquivo": nome, "erros_extracao": [str(exc)]})
+
+    # Pré-checagem de duplicata/versão (sequencial — sessão não é thread-safe)
+    for resultado in resultados:
+        _classificar_versionamento(db, resultado)
 
     resultados.extend(erros_fatais)
 

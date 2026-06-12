@@ -56,6 +56,7 @@ def converter_excel_para_registros(excel_bytes: bytes) -> list[dict]:
     riscos_rows = ler_aba("Riscos")
     exames_rows = ler_aba("Exames")
     ce_rows = ler_aba("Cargo_Exames")
+    meta_rows = ler_aba("Metadados")
 
     # Agrupar tudo por "arquivo"
     registros: dict[str, dict] = {}
@@ -85,6 +86,8 @@ def converter_excel_para_registros(excel_bytes: bytes) -> list[dict]:
             "riscos": [],
             "exames": [],
             "cargo_exames": [],
+            "hash": "",
+            "status_pcmso": "NOVO",
         }
 
     # Agregar linhas das demais abas
@@ -125,5 +128,13 @@ def converter_excel_para_registros(excel_bytes: bytes) -> list[dict]:
                 "tipo_exame": row.get("tipo_exame", ""),
                 "periodicidade_meses": int(period) if str(period).isdigit() else None,
             })
+
+    # Metadados: hash + status de versionamento (preserva o hash no round-trip,
+    # essencial para registrar_versao na aprovação)
+    for row in meta_rows:
+        arquivo = row.get("arquivo", "")
+        if arquivo in registros:
+            registros[arquivo]["hash"] = row.get("hash", "")
+            registros[arquivo]["status_pcmso"] = row.get("status_pcmso", "") or "NOVO"
 
     return list(registros.values())

@@ -30,6 +30,7 @@ ABAS: dict[str, list[str]] = {
         "arquivo", "razao_social", "cargo", "setor", "risco",
         "tipo_exame", "periodicidade_meses",
     ],
+    "Metadados": ["arquivo", "hash", "status_pcmso", "mensagem_versao"],
     "Erros": ["arquivo", "erro"],
 }
 
@@ -150,6 +151,15 @@ def gerar_excel(resultados: list[dict]) -> bytes:
                 _val(ce.get("tipo_exame")),
                 ce.get("periodicidade_meses") or "",
             ])
+
+        # --- Aba Metadados (hash + status de versionamento; não editar) ---
+        ws_meta = sheets["Metadados"]
+        ws_meta.append([
+            arquivo,
+            _val(extracao.get("hash")),
+            _val(extracao.get("status_pcmso")) or "NOVO",
+            _val(extracao.get("mensagem_versao")),
+        ])
 
         # --- Aba Erros ---
         ws_erros = sheets["Erros"]

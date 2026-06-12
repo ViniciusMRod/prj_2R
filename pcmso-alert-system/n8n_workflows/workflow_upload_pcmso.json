@@ -1,92 +1,70 @@
 {
-  "name": "PCMSO - Upload e Extração",
+  "name": "PCMSO - Lote e Extração (Excel para revisão)",
+  "_nota": "Fluxo de lote canônico (Fase 1). Lê os PDFs da pasta, envia em lote para POST /extrair-lote (multipart) e salva o Excel consolidado para o analista revisar. Ponto de partida — validar host/porta/credenciais e o nó de leitura de pasta no n8n UI. A API nova (src/api/main.py) sobe via uvicorn; ajuste a URL conforme o host/porta reais.",
   "nodes": [
     {
       "parameters": {
-        "path": "data/pcmso_raw/",
-        "events": ["add"],
-        "options": { "filter": "*.pdf" }
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "0 7 1 * *" }] }
       },
-      "id": "watch-folder",
-      "name": "Watch Folder pcmso_raw",
-      "type": "n8n-nodes-base.localFileTrigger",
+      "id": "trigger-mensal",
+      "name": "Gatilho mensal (1o dia 07h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
       "position": [240, 300]
     },
     {
       "parameters": {
-        "url": "http://localhost:5000/api/extrair-pcmso",
-        "method": "POST",
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [{ "name": "filename", "value": "={{ $json.fileName }}" }]
-        },
-        "responseFormat": "json"
+        "fileSelector": "data/pcmso_raw/*.pdf",
+        "options": {}
       },
-      "id": "http-extrair",
-      "name": "Extrair PCMSO",
-      "type": "n8n-nodes-base.httpRequest",
+      "id": "read-pdfs",
+      "name": "Ler PDFs da pasta",
+      "type": "n8n-nodes-base.readWriteFile",
       "position": [460, 300]
     },
     {
       "parameters": {
-        "conditions": {
-          "boolean": [{ "value1": "={{ $json.ok }}", "value2": true }]
-        }
+        "url": "http://localhost:8000/extrair-lote",
+        "method": "POST",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            { "parameterType": "formBinaryData", "name": "files", "inputDataFieldName": "data" }
+          ]
+        },
+        "options": { "response": { "response": { "responseFormat": "file" } } }
       },
-      "id": "if-ok",
-      "name": "Extração OK?",
-      "type": "n8n-nodes-base.if",
+      "id": "http-extrair-lote",
+      "name": "Extrair Lote (-> Excel)",
+      "type": "n8n-nodes-base.httpRequest",
       "position": [680, 300]
     },
     {
       "parameters": {
-        "conditions": {
-          "boolean": [{ "value1": "={{ $json.duplicata }}", "value2": true }]
-        }
+        "operation": "write",
+        "fileName": "data/pcmso_lote/PCMSO_Lote_{{ $now.format('yyyy-MM-dd') }}.xlsx",
+        "dataPropertyName": "data",
+        "options": {}
       },
-      "id": "if-dup",
-      "name": "É duplicata?",
-      "type": "n8n-nodes-base.if",
-      "position": [900, 200]
+      "id": "save-excel",
+      "name": "Salvar Excel p/ analista",
+      "type": "n8n-nodes-base.readWriteFile",
+      "position": [900, 300]
     },
     {
       "parameters": {
-        "jsCode": "// Notificar técnico sobre nova validação pendente\nreturn [{ json: { tipo: 'novo_pcmso', validacao_id: $input.first().json.validacao_id, colaboradores: $input.first().json.colaboradores, exames: $input.first().json.exames } }];"
+        "jsCode": "// Avisar o analista que o Excel do lote está pronto para revisão.\nreturn [{ json: { tipo: 'lote_pronto', arquivo: 'PCMSO_Lote.xlsx', mensagem: 'Lote extraído. Revise o Excel (aba Metadados traz status de duplicata/versão) e suba em /converter-excel.' } }];"
       },
-      "id": "fn-notif-novo",
-      "name": "Notificar - Novo PCMSO",
+      "id": "fn-notif-lote",
+      "name": "Notificar - Lote pronto",
       "type": "n8n-nodes-base.code",
-      "position": [900, 400]
-    },
-    {
-      "parameters": {
-        "jsCode": "return [{ json: { tipo: 'duplicata', mensagem: $input.first().json.mensagem } }];"
-      },
-      "id": "fn-notif-dup",
-      "name": "Notificar - Duplicata",
-      "type": "n8n-nodes-base.code",
-      "position": [1120, 120]
-    },
-    {
-      "parameters": {
-        "jsCode": "return [{ json: { tipo: 'erro', mensagem: $input.first().json.erro } }];"
-      },
-      "id": "fn-erro",
-      "name": "Log Erro",
-      "type": "n8n-nodes-base.code",
-      "position": [900, 500]
+      "position": [1120, 300]
     }
   ],
   "connections": {
-    "Watch Folder pcmso_raw": { "main": [[{ "node": "Extrair PCMSO",   "type": "main", "index": 0 }]] },
-    "Extrair PCMSO":          { "main": [[{ "node": "Extração OK?",    "type": "main", "index": 0 }]] },
-    "Extração OK?":           { "main": [
-      [{ "node": "É duplicata?",        "type": "main", "index": 0 }],
-      [{ "node": "Log Erro",            "type": "main", "index": 0 }]
-    ]},
-    "É duplicata?":           { "main": [
-      [{ "node": "Notificar - Duplicata", "type": "main", "index": 0 }],
-      [{ "node": "Notificar - Novo PCMSO","type": "main", "index": 0 }]
-    ]}
+    "Gatilho mensal (1o dia 07h)": { "main": [[{ "node": "Ler PDFs da pasta", "type": "main", "index": 0 }]] },
+    "Ler PDFs da pasta":          { "main": [[{ "node": "Extrair Lote (-> Excel)", "type": "main", "index": 0 }]] },
+    "Extrair Lote (-> Excel)":    { "main": [[{ "node": "Salvar Excel p/ analista", "type": "main", "index": 0 }]] },
+    "Salvar Excel p/ analista":   { "main": [[{ "node": "Notificar - Lote pronto", "type": "main", "index": 0 }]] }
   }
 }
