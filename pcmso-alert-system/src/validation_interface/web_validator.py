@@ -203,6 +203,9 @@ async def aprovar_validacao(
 
     # 4. Inserir mapeamentos cargo × exames
     from datetime import date
+    # Dedup em memória: com autoflush=False, a consulta de existência não vê
+    # linhas pendentes desta mesma requisição — pares repetidos no PDF estourariam uq_cargo_exame.
+    pares_vistos: set[tuple[str, int]] = set()
     for ce_data in dados.get("cargo_exames", []):
         tipo_nome = ce_data.get("tipo_exame", "").strip()
         if not tipo_nome:
@@ -217,7 +220,8 @@ async def aprovar_validacao(
             db.flush()
 
         cargo_nome = ce_data.get("cargo", "").strip()
-        if cargo_nome:
+        if cargo_nome and (cargo_nome, tipo.id) not in pares_vistos:
+            pares_vistos.add((cargo_nome, tipo.id))
             existente_ce = db.scalar(select(CargoExame).where(
                 CargoExame.empresa_id == empresa.id,
                 CargoExame.cargo == cargo_nome,
