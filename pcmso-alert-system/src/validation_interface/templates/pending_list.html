@@ -8,6 +8,19 @@
     <small>PCMSOs aguardando revisão e aprovação</small>
 </div>
 
+{% if request.query_params.get('mensagem_sucesso') %}
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+    <i class="bi bi-check-circle me-2"></i>{{ request.query_params.get('mensagem_sucesso') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if request.query_params.get('mensagem_aviso') %}
+<div class="alert alert-warning alert-dismissible fade show" role="alert">
+    <i class="bi bi-exclamation-triangle me-2"></i>{{ request.query_params.get('mensagem_aviso') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
 <div class="row mb-3">
     <div class="col-md-4">
         <div class="card text-center p-3">

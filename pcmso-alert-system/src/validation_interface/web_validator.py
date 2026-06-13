@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from config.database import get_db, test_connection
 from src.database.models import (
-    Colaborador, CargoExame, Empresa, Exame, StatusExame,
+    Colaborador, CargoExame, Empresa, Exame, PcmsoVersao, StatusExame,
     StatusValidacao, TipoExame, ValidacaoPendente,
 )
 from src.database.queries import get_validacoes_pendentes
@@ -150,6 +150,29 @@ async def aprovar_validacao(
     from src.extraction.duplicate_checker import registrar_versao
     from dateutil.relativedelta import relativedelta
 
+    dados = v.dados_extraidos or {}
+
+    # 0. Guard de duplicata exata: se este hash já foi registrado, não reaprova.
+    #    hash_arquivo é unique → registrar_versao estouraria IntegrityError.
+    #    Aviso amigável em vez de erro 500, sem tocar no banco.
+    hash_arq = dados.get("hash", "")
+    if hash_arq:
+        ja_registrado = db.scalar(
+            select(PcmsoVersao).where(PcmsoVersao.hash_arquivo == hash_arq)
+        )
+        if ja_registrado:
+            from urllib.parse import quote_plus
+            msg = (
+                f"Este PCMSO já foi importado anteriormente "
+                f"(v{ja_registrado.versao}, "
+                f"{ja_registrado.data_upload.strftime('%d/%m/%Y')}). "
+                f"Nenhuma alteração foi feita."
+            )
+            return RedirectResponse(
+                url=f"/validacao?mensagem_aviso={quote_plus(msg)}",
+                status_code=303,
+            )
+
     # 1. Upsert empresa
     # Canonicaliza o CNPJ no formato mascarado (XX.XXX.XXX/XXXX-XX), que é a
     # convenção de armazenamento do projeto. Busca e INSERT usam a mesma forma,
@@ -165,8 +188,6 @@ async def aprovar_validacao(
         )
         db.add(empresa)
         db.flush()
-
-    dados = v.dados_extraidos or {}
 
     # 2. Coletar dados corrigidos do formulário (se acao == editar_aprovar)
     form_data = await request.form()
@@ -276,8 +297,7 @@ async def aprovar_validacao(
             status=StatusExame.PENDENTE,
         ))
 
-    # 6. Registrar versão do PCMSO
-    hash_arq = dados.get("hash", "")
+    # 6. Registrar versão do PCMSO (hash_arq já validado no guard inicial)
     if hash_arq:
         registrar_versao(db, empresa.id, ano_referencia,
                          v.pcmso_filename, hash_arq)
