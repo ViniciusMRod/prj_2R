@@ -140,6 +140,10 @@ class TipoExame(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     nome: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    # Chave de convergência (casefold/sem-acento) — grafias equivalentes mapeiam aqui.
+    nome_normalizado: Mapped[str] = mapped_column(
+        String(100), unique=True, nullable=False, index=True
+    )
     descricao: Mapped[Optional[str]] = mapped_column(Text)
     periodicidade_meses: Mapped[int] = mapped_column(Integer, nullable=False)
     criticidade: Mapped[CriticidadeExame] = mapped_column(

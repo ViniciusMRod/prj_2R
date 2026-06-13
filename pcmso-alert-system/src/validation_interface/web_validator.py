@@ -25,6 +25,7 @@ from src.database.models import (
 )
 from src.database.queries import get_validacoes_pendentes
 from src.demandas.demand_interface import colabs_router, router as demandas_router
+from src.extraction.catalogo import normalizar_exame
 from src.extraction.duplicate_checker import (
     ResultadoDuplicata, calcular_hash_arquivo, verificar_duplicata,
 )
@@ -207,13 +208,14 @@ async def aprovar_validacao(
     # linhas pendentes desta mesma requisição — pares repetidos no PDF estourariam uq_cargo_exame.
     pares_vistos: set[tuple[str, int]] = set()
     for ce_data in dados.get("cargo_exames", []):
-        tipo_nome = ce_data.get("tipo_exame", "").strip()
-        if not tipo_nome:
+        tipo_exibicao, tipo_chave = normalizar_exame(ce_data.get("tipo_exame", ""))
+        if not tipo_chave:
             continue
-        tipo = db.scalar(select(TipoExame).where(TipoExame.nome == tipo_nome))
+        tipo = db.scalar(select(TipoExame).where(TipoExame.nome_normalizado == tipo_chave))
         if not tipo:
             tipo = TipoExame(
-                nome=tipo_nome,
+                nome=tipo_exibicao,
+                nome_normalizado=tipo_chave,
                 periodicidade_meses=ce_data.get("periodicidade_meses") or 12,
             )
             db.add(tipo)
@@ -242,12 +244,12 @@ async def aprovar_validacao(
     # 5. Inserir exames
     from dateutil.relativedelta import relativedelta
     for ex_data in dados.get("exames", []):
-        tipo_nome = ex_data.get("tipo_exame", "").strip()
+        _, tipo_chave = normalizar_exame(ex_data.get("tipo_exame", ""))
         colaborador_nome = ex_data.get("colaborador_nome", "").strip()
-        if not tipo_nome or not colaborador_nome:
+        if not tipo_chave or not colaborador_nome:
             continue
 
-        tipo = db.scalar(select(TipoExame).where(TipoExame.nome == tipo_nome))
+        tipo = db.scalar(select(TipoExame).where(TipoExame.nome_normalizado == tipo_chave))
         if not tipo:
             continue
 
