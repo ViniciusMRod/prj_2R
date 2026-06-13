@@ -30,7 +30,7 @@ from src.extraction.duplicate_checker import (
     ResultadoDuplicata, calcular_hash_arquivo, verificar_duplicata,
 )
 from src.extraction.pdf_extractor import extrair_pcmso, salvar_json_extracao
-from src.extraction.validators import validar_cnpj, validar_cpf, validar_dados_extraidos
+from src.extraction.validators import formatar_cnpj, validar_cnpj, validar_cpf, validar_dados_extraidos
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -149,18 +149,17 @@ async def aprovar_validacao(
     from sqlalchemy import select
     from src.extraction.duplicate_checker import registrar_versao
     from dateutil.relativedelta import relativedelta
-    import re
 
     # 1. Upsert empresa
-    empresa = db.scalar(select(Empresa).where(
-        Empresa.cnpj == re.sub(r"[^\d]", "", cnpj)
-        if len(re.sub(r"[^\d]", "", cnpj)) == 14
-        else Empresa.cnpj == cnpj
-    ))
+    # Canonicaliza o CNPJ no formato mascarado (XX.XXX.XXX/XXXX-XX), que é a
+    # convenção de armazenamento do projeto. Busca e INSERT usam a mesma forma,
+    # senão a reaprovação da mesma empresa não acha e estoura empresas_cnpj_key.
+    cnpj_canonico = formatar_cnpj(cnpj)
+    empresa = db.scalar(select(Empresa).where(Empresa.cnpj == cnpj_canonico))
     if not empresa:
         empresa = Empresa(
             razao_social=razao_social,
-            cnpj=cnpj,
+            cnpj=cnpj_canonico,
             email_sso=email_sso or "sso@empresa.com.br",
             whatsapp_sso=whatsapp_sso,
         )
