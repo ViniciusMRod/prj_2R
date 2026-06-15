@@ -1,6 +1,6 @@
 {
   "name": "PCMSO - Lote assíncrono (Excel para revisão)",
-  "_nota": "Fase 3: POST /extrair-lote agora é assíncrono e devolve {job_uuid}. O download em GET /lote/{job_uuid}/excel responde 409 enquanto processa; o nó de download usa Retry On Fail (polling) até o worker concluir. Garanta que o worker está rodando (scripts/worker_lote.py em loop, ou um cron chamando --once). Ajuste host/porta conforme o deploy.",
+  "_nota": "Fase 3: POST /extrair-lote agora é assíncrono e devolve {job_uuid}. O download em GET /lote/{job_uuid}/excel responde 409 enquanto processa; o nó de download usa Retry On Fail (polling) até o worker concluir. Garanta que o worker está rodando (scripts/worker_lote.py em loop, ou um cron chamando --once). Ajuste host/porta conforme o deploy. ATENCAO: retryOnFail tambem repete em 422 (job 'falhou'), esgotando as 20 tentativas (~10 min) antes de desistir; para distinguir 409 (processando) de 422 (terminal) use um no Function ramificando por status.",
   "nodes": [
     {
       "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 7 1 * *" }] } },

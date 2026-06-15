@@ -45,7 +45,6 @@ def _classificar_versionamento(db: Session, resultado: dict) -> None:
     resultado["mensagem_versao"] = msg if resultado_dup != ResultadoDuplicata.NOVO_ARQUIVO else ""
 
 
-
 @router.post("/extrair-lote", status_code=202,
              summary="Aceita N PDFs e cria um job de extração assíncrono")
 async def extrair_lote(

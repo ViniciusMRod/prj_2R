@@ -26,7 +26,7 @@ que alimenta os outros dois fluxos.
 ## 2. Stack
 
 - **Python + FastAPI** — API e interface web de validação (`web_validator.py`, `api/`).
-- **SQLAlchemy + PostgreSQL** — 9 tabelas (`database/models.py`).
+- **SQLAlchemy + PostgreSQL** — 10 tabelas (`database/models.py`).
 - **openpyxl** — geração/leitura do Excel de revisão.
 - **pypdf** — leitura dos PDFs.
 - **Streamlit** — dashboard das empresas (`dashboard/app.py`).
@@ -35,7 +35,7 @@ que alimenta os outros dois fluxos.
 
 ---
 
-## 3. Modelo de dados — as 9 tabelas (o coração)
+## 3. Modelo de dados — as 10 tabelas (o coração)
 
 | Tabela | Papel | Chave/constraint a conhecer |
 |---|---|---|
@@ -48,6 +48,7 @@ que alimenta os outros dois fluxos.
 | `pcmso_versoes` | Versionamento dos PCMSOs por empresa/ano | `hash_arquivo` **unique** + `uq_pcmso_versao(empresa,ano,versao)` |
 | `cargo_exames` | **Cargo → exame obrigatório** (o contrato) | `uq_cargo_exame(empresa,cargo,tipo_exame)` |
 | `demandas` | Movimentação registrada pelo técnico; snapshot dos exames gerados | — |
+| `lote_jobs` | Fila de jobs de ingestão assíncrona de PDFs (Fase 3) | `job_uuid` **unique**; índice `(status, created_at)` |
 
 > **Três `unique` que causam a maioria dos erros de produção:**
 > `empresas.cnpj`, `pcmso_versoes.hash_arquivo` e
@@ -56,11 +57,15 @@ que alimenta os outros dois fluxos.
 
 ---
 
-## 4. Fluxo 1 — Ingestão do PCMSO (Fases 1–2)
+## 4. Fluxo 1 — Ingestão do PCMSO (Fases 1–3)
 
-1. **Upload do lote** → `POST /extrair-lote` (`api/routes/extracao.py`). Recebe N
-   PDFs, processa **em paralelo** (`ThreadPoolExecutor`, até 8). Cada PDF vira
-   um `extrair_pcmso(...)`.
+1. **Upload do lote** → `POST /extrair-lote` (`api/routes/extracao.py`). Desde a
+   Fase 3 é **assíncrono**: grava os PDFs em staging (`PCMSO_LOTE_STAGING`), cria
+   um job `pendente` em `lote_jobs` e devolve `job_uuid` (HTTP 202). Um worker
+   (`scripts/worker_lote.py`) processa **PDF a PDF** em segundo plano; acompanhe
+   por `GET /lote/{uuid}` e baixe o Excel em `GET /lote/{uuid}/excel`. Os passos
+   2–6 abaixo rodam dentro do worker, um PDF de cada vez (não mais em paralelo na
+   requisição).
 2. **Extração** (`extraction/pdf_extractor.py`): regex sobre o texto puxa
    empresa, CNPJ (formatado com máscara aqui), vigência e o mapa cargo×exame da
    seção "CONTROLE MÉDICO". Filtra as linhas do prestador (Prevenclínica) para
@@ -194,7 +199,9 @@ POST→polling(retry)→download. Prova: `scripts/prova_lote_async.py`.
 - `scripts/prova_upsert_cnpj.py` e `scripts/prova_guard_duplicata.py` — provas
   auto-limpantes dos fixes da Fase 2 (rodam contra o banco de teste e o deixam
   limpo).
-- Suíte: `python -m pytest -q` → **78 testes**.
+- `scripts/worker_lote.py` — worker que processa a fila `lote_jobs` (`--once` para o n8n cron, ou loop contínuo).
+- `scripts/prova_lote_async.py` — prova e2e auto-limpante do lote assíncrono.
+- Suíte: `python -m pytest -q` → **91 testes**.
 
 ---
 
