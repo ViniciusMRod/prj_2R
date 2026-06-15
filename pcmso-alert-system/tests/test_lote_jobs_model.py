@@ -12,6 +12,6 @@ def test_lote_job_tablename_e_colunas():
     cols = LoteJob.__table__.columns
     for nome in ("job_uuid", "status", "total_pdfs", "processados",
                  "com_erro", "staging_dir", "excel_path", "erro_detalhe",
-                 "finished_at"):
+                 "finished_at", "created_at", "updated_at"):
         assert nome in cols
     assert cols["job_uuid"].unique is True
