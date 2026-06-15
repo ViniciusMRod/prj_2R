@@ -171,6 +171,11 @@ enquanto processa, 422 se falhou). Fila na tabela nova `lote_jobs` (estados
 jobs órfãos resetam para `pendente` no start do worker. n8n ajustado para
 POST→polling(retry)→download. Prova: `scripts/prova_lote_async.py`.
 
+**Limpeza de staging/TTL** (`worker_lote.py --limpar`): remove `staging_dir` de
+jobs terminais mais antigos que o TTL (padrão 7 dias, env `PCMSO_LOTE_TTL_DIAS` ou
+flag `--ttl`). Mantém o registro `lote_jobs` para auditoria; zera `staging_dir` e
+`excel_path` no banco para sinalizar que os arquivos foram limpos. 95 testes.
+
 ---
 
 ## 9. Gotchas para o suporte em produção
@@ -189,6 +194,9 @@ POST→polling(retry)→download. Prova: `scripts/prova_lote_async.py`.
   `GET /lote/{uuid}` (status/progresso). Se ficar `pendente` parado, o **worker
   não está rodando** — suba `scripts/worker_lote.py` (loop) ou o cron `--once`.
   `409` = ainda processando; `422` = `falhou` (veja `erro_detalhe`).
+- **"GET /lote/{uuid}/excel retornou 404 depois de um tempo"** → o job expirou o
+  TTL e a limpeza já removeu os arquivos. O registro ainda existe no banco com
+  `staging_dir=null`; o Excel não está mais disponível.
 
 ---
 
@@ -199,17 +207,15 @@ POST→polling(retry)→download. Prova: `scripts/prova_lote_async.py`.
 - `scripts/prova_upsert_cnpj.py` e `scripts/prova_guard_duplicata.py` — provas
   auto-limpantes dos fixes da Fase 2 (rodam contra o banco de teste e o deixam
   limpo).
-- `scripts/worker_lote.py` — worker que processa a fila `lote_jobs` (`--once` para o n8n cron, ou loop contínuo).
+- `scripts/worker_lote.py` — worker que processa a fila `lote_jobs` (`--once` para o n8n cron, ou loop contínuo); `--limpar [--ttl DIAS]` para limpeza de staging.
 - `scripts/prova_lote_async.py` — prova e2e auto-limpante do lote assíncrono.
-- Suíte: `python -m pytest -q` → **91 testes**.
+- Suíte: `python -m pytest -q` → **95 testes**.
 
 ---
 
 ## 11. O que ainda falta (fora de escopo até agora)
 
 - **Fase 4** — e2e formal automatizado.
-- **Limpeza de staging/Excel** — `lote_jobs` e `PCMSO_LOTE_STAGING` crescem
-  indefinidamente; falta uma rotina de retenção/TTL.
 - **Throughput intra-lote** — o worker processa PDFs sequencialmente; paralelizar
   por job ficou fora do escopo da Fase 3.
 - **Colaboradores no lote** — hoje o round-trip do Excel **não** carrega lista de

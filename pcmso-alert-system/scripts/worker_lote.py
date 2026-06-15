@@ -8,11 +8,15 @@ aba Erros (não derruba o lote); erro sistêmico marca 'falhou'.
 Uso:
     python scripts/worker_lote.py --once          # processa pendentes e sai (n8n cron)
     python scripts/worker_lote.py --intervalo 5   # loop contínuo (poll a cada 5s)
+    python scripts/worker_lote.py --limpar        # apaga staging de jobs terminais antigos
+    python scripts/worker_lote.py --limpar --ttl 3  # TTL customizado em dias
 """
 import argparse
+import os
+import shutil
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 try:
@@ -22,7 +26,7 @@ except (AttributeError, ValueError):
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from sqlalchemy import select  # noqa: E402
+from sqlalchemy import select, or_  # noqa: E402
 
 from config.database import SessionLocal  # noqa: E402
 from src.database.models import LoteJob, StatusLote  # noqa: E402
@@ -97,6 +101,35 @@ def _claim_proximo(db):
     return job
 
 
+def limpar_staging(db, ttl_dias: int = 7) -> int:
+    """Remove staging_dir de jobs terminais mais antigos que ttl_dias.
+
+    Mantém o registro no banco (auditoria); só apaga arquivos em disco e
+    zera staging_dir/excel_path no registro para sinalizar que já foi limpo.
+    Retorna o número de jobs limpos.
+    """
+    limite = datetime.now() - timedelta(days=ttl_dias)
+    terminais = (StatusLote.CONCLUIDO, StatusLote.FALHOU)
+    jobs = list(db.scalars(
+        select(LoteJob).where(
+            or_(LoteJob.status == terminais[0], LoteJob.status == terminais[1]),
+            LoteJob.finished_at < limite,
+            LoteJob.staging_dir.isnot(None),
+        )
+    ))
+    removidos = 0
+    for job in jobs:
+        staging = Path(job.staging_dir)
+        if staging.exists():
+            shutil.rmtree(staging)
+        job.staging_dir = None
+        job.excel_path = None
+        removidos += 1
+    if removidos:
+        db.commit()
+    return removidos
+
+
 def executar_worker(once: bool = False, intervalo: float = 5.0) -> None:
     db = SessionLocal()
     try:
@@ -121,12 +154,27 @@ def executar_worker(once: bool = False, intervalo: float = 5.0) -> None:
 
 
 def main() -> None:
+    _ttl_env = int(os.environ.get("PCMSO_LOTE_TTL_DIAS", "7"))
     parser = argparse.ArgumentParser(description="Worker de lotes PCMSO (Fase 3).")
     parser.add_argument("--once", action="store_true",
                         help="processa os pendentes e sai (uso com n8n cron)")
     parser.add_argument("--intervalo", type=float, default=5.0,
                         help="segundos entre polls no modo loop (default 5)")
+    parser.add_argument("--limpar", action="store_true",
+                        help="apaga staging_dir de jobs terminais expirados e sai")
+    parser.add_argument("--ttl", type=int, default=_ttl_env,
+                        help=f"TTL em dias para limpeza (default: PCMSO_LOTE_TTL_DIAS ou {_ttl_env})")
     args = parser.parse_args()
+
+    if args.limpar:
+        db = SessionLocal()
+        try:
+            n = limpar_staging(db, ttl_dias=args.ttl)
+            print(f"[limpar] {n} job(s) limpo(s) (TTL={args.ttl} dias).")
+        finally:
+            db.close()
+        return
+
     executar_worker(once=args.once, intervalo=args.intervalo)
 
 
