@@ -62,3 +62,25 @@ def test_post_extrair_lote_sem_arquivo_400():
     client = TestClient(app)
     resp = client.post("/extrair-lote", files=[])
     assert resp.status_code in (400, 422)  # 422 se o FastAPI barrar antes
+
+
+def test_get_status_lote():
+    job = FakeJob(job_uuid="abc", status=StatusLote.PROCESSANDO,
+                  total_pdfs=120, processados=47, com_erro=2)
+    app.dependency_overrides[get_db] = lambda: FakeDB(job)
+    client = TestClient(app)
+
+    resp = client.get("/lote/abc")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {
+        "job_uuid": "abc", "status": "processando",
+        "total_pdfs": 120, "processados": 47, "com_erro": 2,
+        "excel_pronto": False,
+    }
+
+
+def test_get_status_lote_404():
+    app.dependency_overrides[get_db] = lambda: FakeDB(None)
+    client = TestClient(app)
+    assert client.get("/lote/nao-existe").status_code == 404

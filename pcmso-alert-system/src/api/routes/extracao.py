@@ -79,3 +79,18 @@ async def extrair_lote(
     db.commit()
 
     return {"job_uuid": job_uuid, "total_pdfs": total, "status": StatusLote.PENDENTE.value}
+
+
+@router.get("/lote/{job_uuid}", summary="Status e progresso de um job de lote")
+def status_lote(job_uuid: str, db: Session = Depends(get_db)):
+    job = db.scalar(select(LoteJob).where(LoteJob.job_uuid == job_uuid))
+    if not job:
+        raise HTTPException(status_code=404, detail="Job não encontrado.")
+    return {
+        "job_uuid": job.job_uuid,
+        "status": job.status.value,
+        "total_pdfs": job.total_pdfs,
+        "processados": job.processados,
+        "com_erro": job.com_erro,
+        "excel_pronto": job.status == StatusLote.CONCLUIDO,
+    }
