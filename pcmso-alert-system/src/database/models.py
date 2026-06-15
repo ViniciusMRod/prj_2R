@@ -66,6 +66,13 @@ class StatusDemanda(str, enum.Enum):
     CANCELADO = "cancelado"
 
 
+class StatusLote(str, enum.Enum):
+    PENDENTE = "pendente"
+    PROCESSANDO = "processando"
+    CONCLUIDO = "concluido"
+    FALHOU = "falhou"
+
+
 # ---------------------------------------------------------------------------
 # Tabela 1: Empresas
 # ---------------------------------------------------------------------------
@@ -341,3 +348,30 @@ class Demanda(Base):
 
     def __repr__(self) -> str:
         return f"<Demanda col={self.colaborador_id} tipo={self.tipo_movimentacao} status={self.status}>"
+
+
+# ---------------------------------------------------------------------------
+# Tabela 10: Jobs de lote (ingestão assíncrona de PDFs)
+# ---------------------------------------------------------------------------
+
+class LoteJob(Base):
+    """Job de processamento assíncrono de um lote de PDFs de PCMSO."""
+    __tablename__ = "lote_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    job_uuid: Mapped[str] = mapped_column(String(36), unique=True, nullable=False, index=True)
+    status: Mapped[StatusLote] = mapped_column(
+        Enum(StatusLote), default=StatusLote.PENDENTE, nullable=False
+    )
+    total_pdfs: Mapped[int] = mapped_column(Integer, nullable=False)
+    processados: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    com_erro: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    staging_dir: Mapped[str] = mapped_column(String(500), nullable=False)
+    excel_path: Mapped[Optional[str]] = mapped_column(String(500))
+    erro_detalhe: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+    def __repr__(self) -> str:
+        return f"<LoteJob {self.job_uuid} {self.status} {self.processados}/{self.total_pdfs}>"
