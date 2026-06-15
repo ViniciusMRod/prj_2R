@@ -1,26 +1,31 @@
 """
 POST /extrair-lote
-Recebe N PDFs via multipart/form-data, processa em paralelo e retorna Excel.
+Recebe N PDFs via multipart/form-data, grava em staging e cria job pendente.
 """
 from __future__ import annotations
 
+import os
+import uuid
+import shutil
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from config.database import get_db
-from src.database.models import Empresa
+from src.database.models import Empresa, LoteJob, StatusLote
 from src.extraction.duplicate_checker import ResultadoDuplicata, verificar_duplicata
 from src.extraction.pdf_extractor import extrair_pcmso
 from src.extraction.excel_builder import gerar_excel
 
 router = APIRouter(tags=["Extração"])
+
+PCMSO_LOTE_STAGING = Path(os.getenv("PCMSO_LOTE_STAGING", "data/pcmso_lote_staging/"))
 
 
 def _classificar_versionamento(db: Session, resultado: dict) -> None:
@@ -60,42 +65,37 @@ def _processar_pdf(upload: UploadFile) -> dict:
     return resultado
 
 
-@router.post("/extrair-lote", summary="Extrai N PDFs e retorna Excel para revisão")
+@router.post("/extrair-lote", status_code=202,
+             summary="Aceita N PDFs e cria um job de extração assíncrono")
 async def extrair_lote(
     files: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
 ):
     """
-    Recebe um ou mais PDFs de PCMSO.
-    Processa em paralelo (ThreadPoolExecutor) e retorna arquivo .xlsx
-    com 5 abas de dados + 1 aba de erros.
+    Recebe N PDFs, grava em staging e cria um job 'pendente'.
+    Devolve o job_uuid imediatamente (HTTP 202). O worker processa em background.
     """
     if not files:
         raise HTTPException(status_code=400, detail="Nenhum arquivo enviado.")
 
-    resultados = []
-    erros_fatais = []
+    job_uuid = str(uuid.uuid4())
+    staging = PCMSO_LOTE_STAGING / job_uuid
+    staging.mkdir(parents=True, exist_ok=True)
 
-    with ThreadPoolExecutor(max_workers=min(len(files), 8)) as executor:
-        futures = {executor.submit(_processar_pdf, f): f.filename for f in files}
-        for future in as_completed(futures):
-            nome = futures[future]
-            try:
-                resultados.append(future.result())
-            except Exception as exc:
-                erros_fatais.append({"arquivo": nome, "erros_extracao": [str(exc)]})
+    total = 0
+    for f in files:
+        nome = f.filename or f"arquivo_{total}.pdf"
+        with open(staging / nome, "wb") as out:
+            shutil.copyfileobj(f.file, out)
+        total += 1
 
-    # Pré-checagem de duplicata/versão (sequencial — sessão não é thread-safe)
-    for resultado in resultados:
-        _classificar_versionamento(db, resultado)
-
-    resultados.extend(erros_fatais)
-
-    excel_bytes = gerar_excel(resultados)
-    nome_arquivo = f"PCMSO_Lote_{date.today().isoformat()}.xlsx"
-
-    return Response(
-        content=excel_bytes,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
+    job = LoteJob(
+        job_uuid=job_uuid,
+        status=StatusLote.PENDENTE,
+        total_pdfs=total,
+        staging_dir=str(staging),
     )
+    db.add(job)
+    db.commit()
+
+    return {"job_uuid": job_uuid, "total_pdfs": total, "status": StatusLote.PENDENTE.value}
