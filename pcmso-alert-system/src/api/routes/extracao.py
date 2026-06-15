@@ -7,27 +7,23 @@ from __future__ import annotations
 import os
 import uuid
 import shutil
-import tempfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from config.database import get_db
 from src.database.models import Empresa, LoteJob, StatusLote
 from src.extraction.duplicate_checker import ResultadoDuplicata, verificar_duplicata
-from src.extraction.pdf_extractor import extrair_pcmso
-from src.extraction.excel_builder import gerar_excel
 
 router = APIRouter(tags=["Extração"])
 
 PCMSO_LOTE_STAGING = Path(os.getenv("PCMSO_LOTE_STAGING", "data/pcmso_lote_staging/"))
 
 
+# Reusado pelo worker de lote (Fase 3); o endpoint assíncrono não o chama.
 def _classificar_versionamento(db: Session, resultado: dict) -> None:
     """
     Pré-checa duplicata/versão para um resultado de extração e grava
@@ -47,22 +43,6 @@ def _classificar_versionamento(db: Session, resultado: dict) -> None:
     resultado["status_pcmso"] = resultado_dup.value if hasattr(resultado_dup, "value") else str(resultado_dup)
     resultado["mensagem_versao"] = msg if resultado_dup != ResultadoDuplicata.NOVO_ARQUIVO else ""
 
-
-def _processar_pdf(upload: UploadFile) -> dict:
-    """Salva o upload em arquivo temporário e extrai os dados."""
-    conteudo = upload.file.read()
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        tmp.write(conteudo)
-        tmp_path = Path(tmp.name)
-
-    try:
-        resultado = extrair_pcmso(tmp_path)
-        # Preserva o nome original do arquivo enviado
-        resultado["arquivo"] = upload.filename or tmp_path.name
-    finally:
-        tmp_path.unlink(missing_ok=True)
-
-    return resultado
 
 
 @router.post("/extrair-lote", status_code=202,
