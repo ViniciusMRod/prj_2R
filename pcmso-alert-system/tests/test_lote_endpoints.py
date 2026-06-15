@@ -84,3 +84,36 @@ def test_get_status_lote_404():
     app.dependency_overrides[get_db] = lambda: FakeDB(None)
     client = TestClient(app)
     assert client.get("/lote/nao-existe").status_code == 404
+
+
+def test_get_excel_concluido_200(tmp_path):
+    xlsx = tmp_path / "resultado.xlsx"
+    xlsx.write_bytes(b"PK\x03\x04fake-xlsx")
+    job = FakeJob(job_uuid="ok", status=StatusLote.CONCLUIDO, excel_path=str(xlsx))
+    app.dependency_overrides[get_db] = lambda: FakeDB(job)
+    client = TestClient(app)
+    resp = client.get("/lote/ok/excel")
+    assert resp.status_code == 200
+    assert resp.content == b"PK\x03\x04fake-xlsx"
+
+
+def test_get_excel_em_processamento_409():
+    job = FakeJob(job_uuid="p", status=StatusLote.PROCESSANDO)
+    app.dependency_overrides[get_db] = lambda: FakeDB(job)
+    client = TestClient(app)
+    assert client.get("/lote/p/excel").status_code == 409
+
+
+def test_get_excel_falhou_422():
+    job = FakeJob(job_uuid="f", status=StatusLote.FALHOU, erro_detalhe="staging sumiu")
+    app.dependency_overrides[get_db] = lambda: FakeDB(job)
+    client = TestClient(app)
+    resp = client.get("/lote/f/excel")
+    assert resp.status_code == 422
+    assert "staging sumiu" in resp.json()["detail"]
+
+
+def test_get_excel_404():
+    app.dependency_overrides[get_db] = lambda: FakeDB(None)
+    client = TestClient(app)
+    assert client.get("/lote/x/excel").status_code == 404

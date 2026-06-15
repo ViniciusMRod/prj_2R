@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -79,6 +80,22 @@ async def extrair_lote(
     db.commit()
 
     return {"job_uuid": job_uuid, "total_pdfs": total, "status": StatusLote.PENDENTE.value}
+
+
+_XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+@router.get("/lote/{job_uuid}/excel", summary="Download do Excel consolidado do lote")
+def download_excel_lote(job_uuid: str, db: Session = Depends(get_db)):
+    job = db.scalar(select(LoteJob).where(LoteJob.job_uuid == job_uuid))
+    if not job:
+        raise HTTPException(status_code=404, detail="Job não encontrado.")
+    if job.status == StatusLote.FALHOU:
+        raise HTTPException(status_code=422, detail=job.erro_detalhe or "Processamento falhou.")
+    if job.status != StatusLote.CONCLUIDO or not job.excel_path:
+        raise HTTPException(status_code=409, detail="Lote ainda em processamento.")
+    return FileResponse(job.excel_path, media_type=_XLSX_MIME,
+                        filename=Path(job.excel_path).name)
 
 
 @router.get("/lote/{job_uuid}", summary="Status e progresso de um job de lote")
