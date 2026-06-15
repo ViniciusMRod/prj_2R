@@ -70,7 +70,11 @@ def processar_job(db, job) -> None:
 
 
 def _resetar_orfaos(db) -> int:
-    """Jobs presos em 'processando' (worker morreu) voltam a 'pendente'."""
+    """Jobs presos em 'processando' (worker morreu) voltam a 'pendente'.
+
+    ATENÇÃO: seguro apenas com worker único. Se escalar para N workers,
+    trocar por heartbeat/lease (senão reseta jobs que estão vivos em outro worker).
+    """
     orfaos = list(db.scalars(select(LoteJob).where(LoteJob.status == StatusLote.PROCESSANDO)))
     for job in orfaos:
         job.status = StatusLote.PENDENTE
@@ -104,8 +108,10 @@ def executar_worker(once: bool = False, intervalo: float = 5.0) -> None:
             if job:
                 print(f"[worker] processando {job.job_uuid} ({job.total_pdfs} PDFs)…")
                 processar_job(db, job)
-                print(f"[worker] {job.job_uuid} -> {job.status.value} "
-                      f"(processados={job.processados}, com_erro={job.com_erro})")
+                resumo = f"(processados={job.processados}, com_erro={job.com_erro})"
+                if job.status == StatusLote.FALHOU and job.erro_detalhe:
+                    resumo += f" ERRO: {job.erro_detalhe}"
+                print(f"[worker] {job.job_uuid} -> {job.status.value} {resumo}")
                 continue  # busca o próximo imediatamente
             if once:
                 break
