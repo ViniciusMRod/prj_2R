@@ -157,6 +157,15 @@ do Excel, ligando o arquivo extraído ao arquivo aprovado.
   `IntegrityError` no `hash_arquivo`. **Agora:** vira aviso amigável na tela, sem
   tocar no banco.
 
+**Fase 3 — ingestão assíncrona de lotes grandes** (50–300 PDFs): `POST /extrair-lote`
+agora é assíncrono — devolve `job_uuid` (HTTP 202) e grava os PDFs em staging
+(`PCMSO_LOTE_STAGING`). Um worker (`scripts/worker_lote.py`) processa PDF a PDF,
+com progresso em `GET /lote/{uuid}` e download em `GET /lote/{uuid}/excel` (409
+enquanto processa, 422 se falhou). Fila na tabela nova `lote_jobs` (estados
+`pendente/processando/concluido/falhou`); claim com `FOR UPDATE SKIP LOCKED`;
+jobs órfãos resetam para `pendente` no start do worker. n8n ajustado para
+POST→polling(retry)→download. Prova: `scripts/prova_lote_async.py`.
+
 ---
 
 ## 9. Gotchas para o suporte em produção
@@ -171,6 +180,10 @@ do Excel, ligando o arquivo extraído ao arquivo aprovado.
   canal/dia; cheque `alertas_enviados`.
 - **CNPJ é sempre mascarado no banco.** Toda busca nova deve usar `formatar_cnpj`
   dos dois lados.
+- **"Subi o lote e o Excel não baixa"** → o processamento é assíncrono; cheque
+  `GET /lote/{uuid}` (status/progresso). Se ficar `pendente` parado, o **worker
+  não está rodando** — suba `scripts/worker_lote.py` (loop) ou o cron `--once`.
+  `409` = ainda processando; `422` = `falhou` (veja `erro_detalhe`).
 
 ---
 
@@ -187,8 +200,11 @@ do Excel, ligando o arquivo extraído ao arquivo aprovado.
 
 ## 11. O que ainda falta (fora de escopo até agora)
 
-- **Fase 3** — escala (volume maior de lotes/empresas).
 - **Fase 4** — e2e formal automatizado.
+- **Limpeza de staging/Excel** — `lote_jobs` e `PCMSO_LOTE_STAGING` crescem
+  indefinidamente; falta uma rotina de retenção/TTL.
+- **Throughput intra-lote** — o worker processa PDFs sequencialmente; paralelizar
+  por job ficou fora do escopo da Fase 3.
 - **Colaboradores no lote** — hoje o round-trip do Excel **não** carrega lista de
   pessoas (elas entram pelo fluxo de demanda). Falta confirmar se é o modelo
   definitivo.
