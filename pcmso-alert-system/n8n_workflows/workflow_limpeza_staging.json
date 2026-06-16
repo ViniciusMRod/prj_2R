@@ -1,0 +1,33 @@
+{
+  "name": "PCMSO - Limpeza de staging (TTL)",
+  "_nota": "Roda 'python scripts/worker_lote.py --limpar' semanalmente (segunda 04h) para apagar o staging_dir de jobs terminais (concluido/falhou) mais antigos que o TTL (padrão 7 dias; ajuste por env PCMSO_LOTE_TTL_DIAS ou flag --ttl N). O registro em lote_jobs é mantido (auditoria); só os arquivos em disco saem. O nó executeCommand precisa rodar no MESMO host do app, com cwd = raiz do projeto (pcmso-alert-system) e o Python do venv no PATH. Se o n8n estiver em container separado do app, troque por: (a) um cron de sistema chamando o script, ou (b) um endpoint HTTP que envolva limpar_staging. executeCommand pode estar desabilitado em alguns deploys n8n por segurança.",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 4 * * 1" }] } },
+      "id": "cron-limpeza",
+      "name": "Cron semanal (segunda 04h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [240, 300]
+    },
+    {
+      "parameters": { "command": "python scripts/worker_lote.py --limpar" },
+      "id": "exec-limpar",
+      "name": "Limpar staging (TTL)",
+      "type": "n8n-nodes-base.executeCommand",
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst out = (r.stdout || '').trim();\nconst falhou = (r.exitCode && r.exitCode !== 0);\nreturn [{ json: { mensagem: falhou ? `Limpeza FALHOU (exit ${r.exitCode}): ${r.stderr || ''}` : (out || 'Limpeza executada (sem saída).') } }];"
+      },
+      "id": "fn-log",
+      "name": "Log Resultado",
+      "type": "n8n-nodes-base.code",
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Cron semanal (segunda 04h)": { "main": [[{ "node": "Limpar staging (TTL)", "type": "main", "index": 0 }]] },
+    "Limpar staging (TTL)":       { "main": [[{ "node": "Log Resultado", "type": "main", "index": 0 }]] }
+  }
+}

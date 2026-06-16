@@ -138,7 +138,17 @@ Disparado pelo n8n às **05h00** (`processar_alertas_diarios`):
 - **Dashboard** (`dashboard/app.py`): login da empresa por CNPJ + senha (bcrypt),
   só leitura dos próprios dados.
 - **n8n** (`n8n_workflows/`): `workflow_upload_pcmso`, `workflow_daily_alerts`,
-  `workflow_monthly_report`.
+  `workflow_monthly_report`, `workflow_limpeza_staging`. **Dois apps, duas portas:**
+  os endpoints `/extrair-lote` e `/lote/{uuid}*` são da API de extração na
+  **porta 8000** (`src.api.main`); `/api/processar-alertas` e
+  `/api/relatorio-mensal` são do `web_validator` na **porta 5000**. Cada workflow
+  traz um `_nota` com a porta/app correto — **não unifique as portas**.
+  - `workflow_upload_pcmso`: dois gatilhos (cron mensal + webhook manual
+    `POST /webhook/upload-pcmso-lote`); acompanha o job por **polling explícito**
+    (`GET /lote/{uuid}` → IFs `concluido`/`falhou`/loop), não mais por `retryOnFail`.
+  - `workflow_limpeza_staging`: cron semanal (segunda 04h) → `executeCommand`
+    `python scripts/worker_lote.py --limpar`. Precisa rodar no host do app; se o
+    n8n estiver em container separado, use cron de sistema ou um endpoint.
 
 ---
 
@@ -194,6 +204,12 @@ flag `--ttl`). Mantém o registro `lote_jobs` para auditoria; zera `staging_dir`
   `GET /lote/{uuid}` (status/progresso). Se ficar `pendente` parado, o **worker
   não está rodando** — suba `scripts/worker_lote.py` (loop) ou o cron `--once`.
   `409` = ainda processando; `422` = `falhou` (veja `erro_detalhe`).
+- **"O workflow de alertas/relatório dá connection refused"** → esses endpoints
+  estão no `web_validator` (**porta 5000**), não na API de extração (8000). Cada
+  workflow tem um `_nota` com a porta certa; **não troque 5000 por 8000**.
+- **"O workflow de limpeza não roda"** → o nó `executeCommand` exige que o n8n
+  esteja no mesmo host do app, com `cwd` na raiz do projeto e o Python no PATH. Em
+  container separado, troque por cron de sistema ou um endpoint HTTP.
 - **"GET /lote/{uuid}/excel retornou 404 depois de um tempo"** → o job expirou o
   TTL e a limpeza já removeu os arquivos. O registro ainda existe no banco com
   `staging_dir=null`; o Excel não está mais disponível.

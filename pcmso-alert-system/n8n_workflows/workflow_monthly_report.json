@@ -1,5 +1,6 @@
 {
   "name": "PCMSO - Relatório Mensal",
+  "_nota": "Endpoint /api/relatorio-mensal vive no app web_validator (uvicorn src.validation_interface.web_validator:app), que roda na porta 5000 — NÃO na API de extração (porta 8000). A porta 5000 aqui está CORRETA; não troque para 8000. Ajuste host conforme o deploy.",
   "nodes": [
     {
       "parameters": {

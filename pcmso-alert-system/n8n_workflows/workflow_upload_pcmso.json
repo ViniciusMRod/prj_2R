@@ -1,20 +1,27 @@
 {
   "name": "PCMSO - Lote assíncrono (Excel para revisão)",
-  "_nota": "Fase 3: POST /extrair-lote agora é assíncrono e devolve {job_uuid}. O download em GET /lote/{job_uuid}/excel responde 409 enquanto processa; o nó de download usa Retry On Fail (polling) até o worker concluir. Garanta que o worker está rodando (scripts/worker_lote.py em loop, ou um cron chamando --once). Ajuste host/porta conforme o deploy. ATENCAO: retryOnFail tambem repete em 422 (job 'falhou'), esgotando as 20 tentativas (~10 min) antes de desistir; para distinguir 409 (processando) de 422 (terminal) use um no Function ramificando por status.",
+  "_nota": "App de EXTRAÇÃO roda na porta 8000 (uvicorn src.api.main:app). Fase 3: POST /extrair-lote é assíncrono e devolve {job_uuid}. O acompanhamento agora é por POLLING EXPLÍCITO de status (GET /lote/{uuid}), NÃO mais por retryOnFail no download: um nó GET status alimenta dois IFs (concluido -> baixa Excel; falhou -> notifica erro com erro_detalhe; senão -> espera 30s e volta ao status). Isso elimina o problema antigo de esgotar 20 tentativas em 422. Garanta que o worker está rodando (scripts/worker_lote.py em loop, ou cron --once). Dois gatilhos: cron mensal (dia 1, 07h) e webhook manual (POST /webhook/upload-pcmso-lote) para o analista disparar fora do cron. Ajuste host/porta conforme o deploy.",
   "nodes": [
     {
       "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 7 1 * *" }] } },
       "id": "trigger-mensal",
       "name": "Gatilho mensal (1o dia 07h)",
       "type": "n8n-nodes-base.scheduleTrigger",
-      "position": [240, 300]
+      "position": [240, 240]
+    },
+    {
+      "parameters": { "httpMethod": "POST", "path": "upload-pcmso-lote", "options": {} },
+      "id": "trigger-webhook",
+      "name": "Gatilho manual (webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "position": [240, 420]
     },
     {
       "parameters": { "fileSelector": "data/pcmso_raw/*.pdf", "options": {} },
       "id": "read-pdfs",
       "name": "Ler PDFs da pasta",
       "type": "n8n-nodes-base.readWriteFile",
-      "position": [460, 300]
+      "position": [460, 320]
     },
     {
       "parameters": {
@@ -32,23 +39,58 @@
       "id": "http-extrair-lote",
       "name": "Extrair Lote (cria job)",
       "type": "n8n-nodes-base.httpRequest",
-      "position": [680, 300]
+      "position": [680, 320]
+    },
+    {
+      "parameters": { "amount": 30, "unit": "seconds" },
+      "id": "wait-poll",
+      "name": "Aguardar 30s",
+      "type": "n8n-nodes-base.wait",
+      "position": [900, 320]
+    },
+    {
+      "parameters": {
+        "url": "=http://localhost:8000/lote/{{ $json.job_uuid }}",
+        "method": "GET",
+        "options": { "response": { "response": { "responseFormat": "json" } } }
+      },
+      "id": "http-status",
+      "name": "Consultar status do job",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1120, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [{ "value1": "={{ $json.status }}", "operation": "equal", "value2": "concluido" }]
+        }
+      },
+      "id": "if-concluido",
+      "name": "Concluído?",
+      "type": "n8n-nodes-base.if",
+      "position": [1340, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [{ "value1": "={{ $json.status }}", "operation": "equal", "value2": "falhou" }]
+        }
+      },
+      "id": "if-falhou",
+      "name": "Falhou?",
+      "type": "n8n-nodes-base.if",
+      "position": [1340, 500]
     },
     {
       "parameters": {
         "url": "=http://localhost:8000/lote/{{ $json.job_uuid }}/excel",
         "method": "GET",
-        "options": {
-          "response": { "response": { "responseFormat": "file" } },
-          "retryOnFail": true,
-          "maxTries": 20,
-          "waitBetweenTries": 30000
-        }
+        "options": { "response": { "response": { "responseFormat": "file" } } }
       },
       "id": "http-download-excel",
-      "name": "Baixar Excel (polling via retry)",
+      "name": "Baixar Excel",
       "type": "n8n-nodes-base.httpRequest",
-      "position": [900, 300]
+      "position": [1560, 200]
     },
     {
       "parameters": {
@@ -60,7 +102,7 @@
       "id": "save-excel",
       "name": "Salvar Excel p/ analista",
       "type": "n8n-nodes-base.readWriteFile",
-      "position": [1120, 300]
+      "position": [1780, 200]
     },
     {
       "parameters": {
@@ -69,14 +111,34 @@
       "id": "fn-notif-lote",
       "name": "Notificar - Lote pronto",
       "type": "n8n-nodes-base.code",
-      "position": [1340, 300]
+      "position": [2000, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { tipo: 'lote_falhou', mensagem: `Lote ${$json.job_uuid} FALHOU: ${$json.erro_detalhe || 'erro sistêmico'}. Verifique o worker e o diretório de staging.` } }];"
+      },
+      "id": "fn-notif-erro",
+      "name": "Notificar - Lote falhou",
+      "type": "n8n-nodes-base.code",
+      "position": [1560, 500]
     }
   ],
   "connections": {
     "Gatilho mensal (1o dia 07h)": { "main": [[{ "node": "Ler PDFs da pasta", "type": "main", "index": 0 }]] },
-    "Ler PDFs da pasta":          { "main": [[{ "node": "Extrair Lote (cria job)", "type": "main", "index": 0 }]] },
-    "Extrair Lote (cria job)":    { "main": [[{ "node": "Baixar Excel (polling via retry)", "type": "main", "index": 0 }]] },
-    "Baixar Excel (polling via retry)": { "main": [[{ "node": "Salvar Excel p/ analista", "type": "main", "index": 0 }]] },
+    "Gatilho manual (webhook)":    { "main": [[{ "node": "Ler PDFs da pasta", "type": "main", "index": 0 }]] },
+    "Ler PDFs da pasta":           { "main": [[{ "node": "Extrair Lote (cria job)", "type": "main", "index": 0 }]] },
+    "Extrair Lote (cria job)":     { "main": [[{ "node": "Aguardar 30s", "type": "main", "index": 0 }]] },
+    "Aguardar 30s":                { "main": [[{ "node": "Consultar status do job", "type": "main", "index": 0 }]] },
+    "Consultar status do job":     { "main": [[{ "node": "Concluído?", "type": "main", "index": 0 }]] },
+    "Concluído?": { "main": [
+      [{ "node": "Baixar Excel", "type": "main", "index": 0 }],
+      [{ "node": "Falhou?", "type": "main", "index": 0 }]
+    ]},
+    "Falhou?": { "main": [
+      [{ "node": "Notificar - Lote falhou", "type": "main", "index": 0 }],
+      [{ "node": "Aguardar 30s", "type": "main", "index": 0 }]
+    ]},
+    "Baixar Excel":               { "main": [[{ "node": "Salvar Excel p/ analista", "type": "main", "index": 0 }]] },
     "Salvar Excel p/ analista":   { "main": [[{ "node": "Notificar - Lote pronto", "type": "main", "index": 0 }]] }
   }
 }
