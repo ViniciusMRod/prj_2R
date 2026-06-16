@@ -1,6 +1,6 @@
 {
   "name": "PCMSO - Lote assíncrono (Excel para revisão)",
-  "_nota": "App de EXTRAÇÃO roda na porta 8000 (uvicorn src.api.main:app). Fase 3: POST /extrair-lote é assíncrono e devolve {job_uuid}. O acompanhamento agora é por POLLING EXPLÍCITO de status (GET /lote/{uuid}), NÃO mais por retryOnFail no download: um nó GET status alimenta dois IFs (concluido -> baixa Excel; falhou -> notifica erro com erro_detalhe; senão -> espera 30s e volta ao status). Isso elimina o problema antigo de esgotar 20 tentativas em 422. Garanta que o worker está rodando (scripts/worker_lote.py em loop, ou cron --once). Dois gatilhos: cron mensal (dia 1, 07h) e webhook manual (POST /webhook/upload-pcmso-lote) para o analista disparar fora do cron. Ajuste host/porta conforme o deploy.",
+  "_nota": "App de EXTRAÇÃO roda na porta 8000 (uvicorn src.api.main:app). Fase 3: POST /extrair-lote é assíncrono e devolve {job_uuid}. O acompanhamento agora é por POLLING EXPLÍCITO de status (GET /lote/{uuid}), NÃO mais por retryOnFail no download: um nó GET status alimenta dois IFs (concluido -> baixa Excel; falhou -> notifica erro com erro_detalhe; senão -> espera 30s e volta ao status). Isso elimina o problema antigo de esgotar 20 tentativas em 422. Garanta que o worker está rodando (scripts/worker_lote.py em loop, ou cron --once). Dois gatilhos: cron mensal (dia 1, 07h) e webhook manual (POST /webhook/upload-pcmso-lote) para o analista disparar fora do cron. URLs usam host.docker.internal pois o n8n roda em Docker e precisa alcançar os apps no host.",
   "nodes": [
     {
       "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 7 1 * *" }] } },
@@ -25,7 +25,7 @@
     },
     {
       "parameters": {
-        "url": "http://localhost:8000/extrair-lote",
+        "url": "http://host.docker.internal:8000/extrair-lote",
         "method": "POST",
         "sendBody": true,
         "contentType": "multipart-form-data",
@@ -50,7 +50,7 @@
     },
     {
       "parameters": {
-        "url": "=http://localhost:8000/lote/{{ $json.job_uuid }}",
+        "url": "=http://host.docker.internal:8000/lote/{{ $json.job_uuid }}",
         "method": "GET",
         "options": { "response": { "response": { "responseFormat": "json" } } }
       },
@@ -83,7 +83,7 @@
     },
     {
       "parameters": {
-        "url": "=http://localhost:8000/lote/{{ $json.job_uuid }}/excel",
+        "url": "=http://host.docker.internal:8000/lote/{{ $json.job_uuid }}/excel",
         "method": "GET",
         "options": { "response": { "response": { "responseFormat": "file" } } }
       },
