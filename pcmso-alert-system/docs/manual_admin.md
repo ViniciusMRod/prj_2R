@@ -216,7 +216,60 @@ flag `--ttl`). Mantém o registro `lote_jobs` para auditoria; zera `staging_dir`
 
 ---
 
-## 10. Scripts de diagnóstico
+## 10. Guia de subida dos serviços (pré-requisito para rodar no n8n)
+
+Antes de importar os workflows no n8n e testar com dados reais, todos os 4 componentes abaixo precisam estar de pé **no mesmo host** (ou com os hosts ajustados nos JSONs).
+
+### Sequência de subida (4 terminais / processos)
+
+```powershell
+# 1 — API de extração (porta 8000) — gateway dos workflows de upload
+cd D:\vinic\prj_2R\pcmso-alert-system
+uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 2 — Web validator (porta 5000) — alertas diários + relatório mensal
+uvicorn src.validation_interface.web_validator:app --host 0.0.0.0 --port 5000 --reload
+
+# 3 — Worker de lote (loop contínuo) — processa a fila lote_jobs
+python scripts/worker_lote.py
+
+# 4 — Dashboard Streamlit (opcional, porta 8501)
+streamlit run dashboard/app.py
+```
+
+> Se preferir `--once` no worker (para usar com cron ou n8n `executeCommand`), substitua o comando 3 por `python scripts/worker_lote.py --once`.
+
+### Ajuste de host para n8n em Docker
+
+Os JSONs dos workflows usam `http://localhost:800x`. Se o n8n rodar em container separado, substitua `localhost` por `host.docker.internal` nos 4 arquivos de `n8n_workflows/` antes de importar.
+
+### Passos para importar os workflows no n8n
+
+1. Abra o n8n editor.
+2. Menu → **Workflows** → **Import from file**.
+3. Importe cada um dos 4 JSONs de `n8n_workflows/` em qualquer ordem.
+4. Ative manualmente cada workflow (toggle ativo).
+5. Para testar o upload sem esperar o cron mensal: dispare o webhook `POST /webhook/upload-pcmso-lote` com os PDFs do analista em `multipart/form-data` (campo `files`).
+
+### Validação mínima antes do lote real
+
+```powershell
+# Backend isolado (sem n8n) — deve imprimir "RESULTADO: PASSOU"
+python scripts/prova_lote_async.py
+
+# Health dos dois apps (depois de subir os serviços)
+curl http://localhost:8000/docs   # deve abrir a UI Swagger da extração
+curl http://localhost:5000/docs   # deve abrir a UI Swagger do web_validator
+```
+
+### Onde colocar os PDFs do analista
+
+- Pasta de entrada: `data/pcmso_raw/` (configure `PCMSO_PDF_DIR` no `.env` se quiser outro caminho).
+- Pasta de saída (Excel gerado): `data/pcmso_lote/` (criada em 2026-06-16).
+
+---
+
+## 11. Scripts de diagnóstico
 
 - `scripts/raio_x_banco.py` — inspeção **read-only** do PostgreSQL (use `--detalhe`).
 - `scripts/e2e_lote_demo.py` — prova o fluxo de ingestão ponta a ponta.
@@ -229,7 +282,7 @@ flag `--ttl`). Mantém o registro `lote_jobs` para auditoria; zera `staging_dir`
 
 ---
 
-## 11. O que ainda falta (fora de escopo até agora)
+## 12. O que ainda falta (fora de escopo até agora)
 
 - **Fase 4** — e2e formal automatizado.
 - **Throughput intra-lote** — o worker processa PDFs sequencialmente; paralelizar
