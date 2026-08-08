@@ -25,6 +25,10 @@ build/
 *.key
 *.pem
 
+# Dados que identificam o cliente (repositório é público).
+# O modelo versionado é dados_cliente.example.py.
+notas-fiscais-automacao/src/dados_cliente.py
+
 # Arquivos de lock do LibreOffice/Excel
 .~lock.*
 

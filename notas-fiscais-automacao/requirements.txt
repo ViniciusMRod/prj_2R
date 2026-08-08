@@ -1,0 +1,5 @@
+# Validação de planilha
+openpyxl==3.1.2
+
+# Automação de navegador (Fase 2 — esqueleto, ainda não em uso em produção)
+playwright==1.45.0
