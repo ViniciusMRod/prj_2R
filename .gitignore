@@ -19,6 +19,12 @@ build/
 # PDFs com dados sensíveis
 *.pdf
 
+# Certificados digitais (chave privada — nunca commitar)
+*.pfx
+*.p12
+*.key
+*.pem
+
 # Arquivos de lock do LibreOffice/Excel
 .~lock.*
 
