@@ -10,33 +10,27 @@ Contexto completo, veredito de viabilidade e decisões técnicas:
 `Vini_Vault/Project_2R/notasFiscais/analise-automacao/` (relatório do
 council + transcript).
 
-## Status: Fase 1 FECHADA (0 erros) — Fase 2 falta um único acesso
+## Status: Fase 1 FECHADA (0 erros) — Fase 2 em spike ao vivo (09/08)
 
 `validar_planilha.py` roda **sem erros bloqueantes** contra a planilha do
 2R desde `PLANILHA ATUALIZADA_v02.xlsx` (31/07) — as 4 correções de CNPJ
 pedidas no Bloco 1 fecharam o gate da Fase 1. `src/robo_emissao.py`
-segue **esqueleto não executável**, mas os dois pontos que travam a
-Fase 2 colapsaram numa única causa: ninguém aqui ainda entrou na tela
-autenticada do portal.
+segue **esqueleto não executável**, mas o spike presencial começou e já
+resolveu o ponto mais incerto.
 
-- **Login com certificado**: bem menos arriscado do que parecia na
-  rodada 1, e a resposta do 2R (31/07) simplificou ainda mais. O
-  certificado A1 está instalado só no **notebook da analista**, não pede
-  mais senha/PIN a cada acesso, e só ela emite hoje — um único operador,
-  uma única máquina. Não é um `.pfx` que o robô precisaria carregar ou
-  assinar em código. Rodando o Chromium em modo visível NESSE NOTEBOOK,
-  o Windows deve autenticar sozinho (ou no máximo mostrar o seletor
-  nativo, se houver mais de um certificado instalado); o `input()` que já
-  existe no código foi desenhado para esse passo manual. Ainda não foi
-  **observado** acontecendo — é o primeiro teste do spike, mas a
-  probabilidade de funcionar de primeira subiu bastante sem a senha.
-- **Seletores do formulário**: os PDFs confirmaram os *valores*, não os
-  *campos*. Só se resolve olhando o DOM autenticado. Uma coisa a MENOS
-  para capturar: o 2R confirmou que o portal preenche o **endereço do
-  tomador sozinho** a partir do CNPJ/CPF — não precisa mapear um fluxo de
-  CEP manual, e não é preciso coletar endereço das 274 empresas.
+- **Login com certificado — CONFIRMADO FUNCIONANDO.** Testado de verdade
+  via `playwright codegen` no notebook da analista (09/08): o Chromium
+  abriu o seletor nativo do Windows (mais de um certificado instalado
+  ali), ela escolheu o do prestador, sem pedir senha depois. Nenhuma
+  config de `client_certificates` no Playwright foi necessária — o
+  `input()` que já existia no código cobre exatamente esse clique manual.
+- **Seletores do formulário — captura em andamento.** Os PDFs confirmaram
+  os *valores*, os vídeos confirmaram os *nomes* dos campos (ver Rodada
+  4), e agora o `codegen` está gerando os *seletores* reais ao vivo, campo
+  por campo. Endereço do tomador continua confirmado automático — não
+  precisa mapear fluxo de CEP nem coletar endereço das 274 empresas.
 
-Os dois se resolvem na MESMA sessão — ver `ROTEIRO-SPIKE.md`.
+Ver `ROTEIRO-SPIKE.md` para o progresso passo a passo.
 
 ### O que a rodada 2 resolveu
 

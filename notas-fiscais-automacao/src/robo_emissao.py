@@ -21,19 +21,15 @@ NÃO EXECUTAR contra o portal de produção antes de:
      os CAMPOS onde preenchê-los. Exige acesso à tela autenticada
      (sessão presencial na máquina do 2R, ou acesso de desenvolvimento
      temporário) para capturar via DevTools.
-  3. CONFIRMAR AO VIVO o login com certificado — CONFIRMADO pela analista
-     (2R, 31/07): o certificado A1 está instalado só no notebook DELA,
-     não pede mais senha/PIN a cada acesso, e só ela emite hoje (um único
-     operador, uma única máquina). Rodando o Chromium em modo visível
-     (headless=False) NESSE NOTEBOOK, o Windows deve abrir o certificado
-     automaticamente (ou o seletor nativo, se houver mais de um instalado)
-     — o `input()` em `emitir_lote` já foi desenhado para esse passo
-     manual, sem nenhuma config de `client_certificates` no Playwright.
-     Ainda não OBSERVADO acontecendo — sem senha, é ainda mais provável
-     que funcione de primeira, mas continua sendo o primeiro teste do
-     spike. Consequência: este robô só pode rodar NESSE NOTEBOOK
-     específico, nunca em servidor, nuvem ou máquina do consultor. Este
-     código nunca lê nem copia o .pfx.
+  3. Login com certificado — CONFIRMADO FUNCIONANDO (spike, 09/08): testado
+     de verdade via `playwright codegen` no notebook da analista. O
+     Chromium abriu o seletor nativo do Windows (mais de um certificado
+     instalado nesse notebook), a analista escolheu o do prestador, sem
+     pedir senha/PIN depois disso. Nenhuma config de `client_certificates`
+     no Playwright foi necessária — o `input()` em `emitir_lote` cobre
+     exatamente esse clique manual. Consequência confirmada: este robô só
+     pode rodar NESSE NOTEBOOK específico, nunca em servidor, nuvem ou
+     máquina do consultor. Este código nunca lê nem copia o .pfx.
 
 Os itens 2 e 3 se resolvem na MESMA sessão (ver ROTEIRO-SPIKE.md).
 
