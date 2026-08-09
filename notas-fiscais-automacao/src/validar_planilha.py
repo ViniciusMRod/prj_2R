@@ -60,7 +60,10 @@ except ImportError as erro:  # pragma: no cover - erro de instalação
 # desce abaixo de ~2%: um dedo escorregado (0.0419 -> 0.0041) recolheria
 # ISS 10x menor e passaria despercebido.
 ALIQUOTA_ISS_MAXIMA = 0.05  # 5%
-ALIQUOTA_ISS_MINIMA_PLAUSIVEL = 0.02  # 2%
+# 1,8% é o piso REAL declarado pelo próprio portal (aviso na tela de
+# retenção, confirmado por vídeo do cliente, 07/08): "é permitido informar
+# alíquota mínima de 1,8%". Não é estimativa nossa.
+ALIQUOTA_ISS_MINIMA_PLAUSIVEL = 0.018  # 1,8%
 
 # Quantas linhas do topo são inspecionadas à procura do cabeçalho.
 MAX_LINHAS_BUSCA_CABECALHO = 10
@@ -117,6 +120,17 @@ def mapear_colunas(cabecalho) -> dict:
             if alt in normalizado:
                 mapa[chave] = normalizado[alt]
                 break
+
+    # Coluna do grupo de empresas com antecedência maior (~50, nota junto
+    # com boleto — confirmado pelo 2R em 31/07). Nome real visto na
+    # planilha v03: "EMITIR 12 DIAS ANTES DO VENCIMENTO". O número de dias
+    # pode mudar entre planilhas futuras, por isso busca por padrão em vez
+    # de lista fechada como as demais colunas.
+    for texto_normalizado, indice in normalizado.items():
+        if texto_normalizado.startswith("EMITIR") and "DIAS ANTES" in texto_normalizado:
+            mapa["antecedencia_especial"] = indice
+            break
+
     return mapa
 
 
@@ -361,6 +375,7 @@ def validar(caminho: Path):
     tem_descricao = "descricao" in colunas
     tem_retencao = "retencao_iss" in colunas
     tem_aliquota = "aliquota_iss" in colunas
+    tem_antecedencia_especial = "antecedencia_especial" in colunas
 
     problemas = []
     mescladas = mapa_celulas_mescladas(ws)
@@ -373,6 +388,7 @@ def validar(caminho: Path):
         "cnpj": 0,
         "cpf": 0,
         "documento_problema": 0,
+        "antecedencia_especial": 0,
         "soma_valores": 0.0,
         "com_retencao_iss": 0,
     }
@@ -566,6 +582,21 @@ def validar(caminho: Path):
             if tem_marca_retencao:
                 estatisticas["com_retencao_iss"] += 1
 
+        # ---------- Antecedência especial (grupo ~50, nota junto com boleto) ----------
+        # Confirmado pelo 2R (31/07): esse grupo precisa de 10-12 dias de
+        # antecedência em vez dos 3-5 padrão. Só validamos SIM/vazio aqui —
+        # o agrupador de lote que USA essa coluna ainda não foi escrito
+        # (ver README, travado no spike).
+        if tem_antecedencia_especial:
+            marca_bruta = celula("antecedencia_especial")
+            marca_txt = texto_limpo(marca_bruta)
+            if marca_txt and marca_txt not in VALORES_SIM and marca_txt not in VALORES_NAO:
+                registra(SEVERIDADE_AVISO, num_linha, empresa, "ANTECEDENCIA_VALOR_ESTRANHO",
+                         f"Coluna de antecedência especial com valor '{marca_bruta}' — "
+                         "esperado SIM/NÃO ou vazio")
+            elif marca_txt in VALORES_SIM:
+                estatisticas["antecedencia_especial"] += 1
+
     # ---------- Duplicatas de documento ----------
     for digitos, ocorrencias in documentos_vistos.items():
         if len(ocorrencias) < 2:
@@ -594,6 +625,7 @@ def validar(caminho: Path):
         "tem_descricao": tem_descricao,
         "tem_retencao": tem_retencao,
         "tem_aliquota": tem_aliquota,
+        "tem_antecedencia_especial": tem_antecedencia_especial,
         "descricoes_especificas": descricoes_especificas,
         "estatisticas": estatisticas,
         "linhas_com_merge": linhas_com_merge,
@@ -700,6 +732,8 @@ def imprimir_resumo(caminho: Path, problemas, contexto):
     print(f"  Soma dos valores:                     R$ {est['soma_valores']:,.2f}"
           .replace(",", "#").replace(".", ",").replace("#", "."))
     print(f"  Linhas com retenção de ISS:           {est['com_retencao_iss']}")
+    if contexto["tem_antecedencia_especial"]:
+        print(f"  Grupo antecedência especial:          {est['antecedencia_especial']}")
 
     descricoes = contexto["descricoes_especificas"]
     print("\n" + "=" * 70)

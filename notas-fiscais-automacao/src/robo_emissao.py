@@ -545,15 +545,20 @@ def preencher_nota(page: Page, nota: NotaFiscal) -> None:
             f"({ALIQUOTA_ISS_MAXIMA:.0%}) em L{nota.linha_planilha} ({nota.empresa})."
         )
 
-    # TODO: TODOS os seletores abaixo continuam PLACEHOLDERS e precisam ser
-    # confirmados contra o DOM real da tela autenticada. Os PDFs
-    # confirmaram os valores a preencher, não os campos.
+    # TODO: TODOS os seletores abaixo continuam PLACEHOLDERS (ids tipo
+    # #documentoTomador nunca foram vistos no DOM real). Só os NOMES e a
+    # ORDEM dos campos estão confirmados agora, via dois vídeos que o
+    # cliente enviou (07-08/08) mostrando o preenchimento real na tela —
+    # ver quadro completo em ROTEIRO-SPIKE.md. Falta ainda: abrir o DevTools
+    # e pegar o seletor de cada um.
     #
-    # TODO (SEPARADOR DECIMAL): os campos de moeda e alíquota são formatados
-    # com PONTO decimal ("1595.00", "4.19"). Se o campo do portal tiver
-    # máscara pt-BR, o ponto pode ser lido como separador de MILHAR — R$
-    # 1.595,00 viraria R$ 159.500,00. Conferir na tela autenticada e, se for
-    # o caso, trocar para vírgula.
+    # Fluxo real tem MAIS telas que o mapeado antes por texto/PDF:
+    #   Pessoas -> Serviço -> Tributação -> Valores -> Emitir NFS-e
+    # (o portal chama de "Tributação" o que documentamos como "Serviço" +
+    # "retenção" juntos — são passos separados na tela).
+    #
+    # CONFIRMADO (vídeo): valor e alíquota usam VÍRGULA decimal na tela
+    # ("1.595,00", "4,19"), não ponto. Corrigido abaixo.
     #
     # TODO (CONFERÊNCIA MAIS VALIOSA QUE FALTA): depois de preencher o
     # documento, o portal resolve e exibe a RAZÃO SOCIAL do tomador. Reler
@@ -561,26 +566,47 @@ def preencher_nota(page: Page, nota: NotaFiscal) -> None:
     # única checagem que fecha a classe "CNPJ com dígito verificador válido
     # mas de outra empresa" — que nenhuma validação offline detecta.
     page.click("text=Emissão Completa")
-    page.fill("#documentoTomador", nota.documento_tomador)
+    page.fill("#documentoTomador", nota.documento_tomador)  # "CPF/CNPJ *"
+
+    # CONFIRMADO (vídeo): aba Serviço tem uma pergunta ANTES do código de
+    # tributação, não documentada antes: "O serviço prestado é um caso de:
+    # imunidade, exportação de serviço ou não incidência do ISSQN?" — as
+    # 274 empresas da planilha são todas "Não" (nenhuma isenção conhecida).
+    page.click("#casoImunidadeExportacao_nao")
     page.click(f"text={CODIGO_TRIBUTACAO_NACIONAL}")
-    page.fill("#descricaoServico", descricao)
+    page.fill("#descricaoServico", descricao)  # "Descrição do Serviço *"
     page.click(f"text={NBS_ITEM_ROTULO}")
-    # Decimal para o valor digitado bater com a base usada em calcular_iss:
-    # f"{375.125:.2f}" devolve '375.12' (meio para o par) e o cálculo do ISS
-    # usaria 375.13 — os dois caminhos de arredondamento precisam coincidir.
-    page.fill("#valorNota", str(Decimal(str(nota.valor)).quantize(
-        Decimal("0.01"), rounding=ROUND_HALF_UP)))
+
+    def _valor_br(valor: float) -> str:
+        """Formata valor no padrão que o campo do portal usa: vírgula."""
+        return str(Decimal(str(valor)).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP)).replace(".", ",")
+
+    # "Valor do serviço prestado *", na aba Valores.
+    page.fill("#valorNota", _valor_br(nota.valor))
 
     if nota.tem_retencao_iss:
-        # Confirmado pelo DANFSe da NF 547: com retenção o portal preenche
-        # BC ISSQN = valor do serviço, Alíquota Aplicada = alíquota
-        # informada e ISSQN Apurado = valor × alíquota.
+        # Confirmado pelo DANFSe da NF 547 e pelo vídeo do exemplo real
+        # com retenção: BC ISSQN = valor do serviço, Alíquota Aplicada =
+        # alíquota informada, ISSQN Apurado = valor × alíquota.
         issqn, liquido = calcular_iss(nota.valor, nota.aliquota_iss)
         page.click("#retencaoIssSim")
-        # TODO: confirmar se o portal PEDE a alíquota (campo editável) ou se
-        # já a traz do cadastro do tomador. De todo modo, os valores
-        # calculados servem para o operador conferir o que a tela mostrar.
-        page.fill("#aliquotaIss", f"{nota.aliquota_iss * 100:.2f}")
+        # CONFIRMADO (vídeo): depois de marcar retenção, o portal pergunta
+        # "Informe abaixo por quem o imposto será retido" — Retido pelo
+        # Tomador / Retido pelo Intermediário. Sempre pelo Tomador aqui:
+        # nenhuma nota do cliente tem intermediário.
+        page.click("#retidoPeloTomador")
+        # CONFIRMADO: alíquota É digitável (não vem do cadastro do
+        # tomador). O próprio portal avisa: "Para o prestador de serviço
+        # ME/EPP com apuração do ISSQN pelo simples nacional, é obrigatório
+        # informar alíquota... é permitido informar alíquota mínima de
+        # 1,8%" — mesmo piso usado em ALIQUOTA_ISS_MINIMA_PLAUSIVEL.
+        page.fill("#aliquotaIss", f"{nota.aliquota_iss * 100:.2f}".replace(".", ","))
+        # CONFIRMADO (vídeo): duas perguntas Sim/Não aparecem em seguida,
+        # sempre "Não" nas notas já vistas — nenhuma tem benefício
+        # municipal nem dedução/redução conhecidos.
+        page.click("#beneficioMunicipal_nao")
+        page.click("#deducaoReducao_nao")
         print(
             f"  [conferir na tela] BC ISSQN R$ {nota.valor:.2f} | alíquota "
             f"{nota.aliquota_iss * 100:.2f}% | ISSQN apurado R$ {issqn:.2f} | "
@@ -591,6 +617,13 @@ def preencher_nota(page: Page, nota: NotaFiscal) -> None:
 
     page.click(f"text={REGIME_APURACAO_TRIBUTOS.upper()}")
     page.select_option("#situacaoPisCofins", "00")
+    # CONFIRMADO (vídeo): campo separado, sempre visto como "PIS/COFINS/CSLL
+    # Não Retidos" — não documentado antes.
+    page.select_option("#tipoRetencaoPisCofinsCsll", "NAO_RETIDOS")
+    # TODO: "VALOR APROXIMADO DOS TRIBUTOS" (Federal/Estadual/Municipal %)
+    # apareceu no vídeo já preenchido com 0,90/0,10/0,00 — parece ser
+    # CONFIGURAÇÃO DA CONTA do emitente, não campo por nota. Confirmar no
+    # spike se essa tela aparece a cada nota ou só na primeira vez.
     # Formulário preenchido — PARA AQUI. A emissão é um clique humano.
 
 
@@ -707,16 +740,24 @@ def emitir_lote(notas: list[NotaFiscal], pasta_saida: Path, indice_mes: int) -> 
             input(
                 f"[{posicao}/{len(pendentes)}] L{nota.linha_planilha} {nota.empresa} "
                 f"({nota.tipo_documento} {nota.documento_tomador}, R$ {nota.valor:.2f}) "
-                "preenchida. REVISE e clique em 'Emitir' na tela. O PDF deve ser salvo como "
-                f"'{nome_pdf}'. Enter DEPOIS de emitir (marca como emitida), "
+                "preenchida. REVISE e clique em 'Emitir' na tela. Depois clique em 'Baixar "
+                "DANFSe', resolva o desafio 'Sou humano' que o portal pedir e salve o PDF "
+                f"como '{nome_pdf}'. Enter DEPOIS de emitir e baixar (marca como emitida), "
                 "Ctrl+C para interromper o lote..."
             )
             # O Enter acima é a confirmação humana de que a nota SAIU. Grava
             # já, para que uma interrupção logo em seguida não a reemita.
             registrar_emitida(registro_caminho, registro, nota)
-            # TODO: capturar o download do PDF gerado pelo portal e salvá-lo em
-            # pasta_saida / nome_pdf (page.expect_download). Depende de observar
-            # como o portal entrega o arquivo depois da emissão.
+            # NÃO AUTOMATIZÁVEL (confirmado por vídeo, 07/08): a tela pós-
+            # emissão tem os botões "Baixar XML" / "Baixar DANFSe" /
+            # "Visualizar NFS-e" / "NFS-e emitidas" / "Nova NFS-e" — mas
+            # clicar em baixar abre um modal "VALIDAÇÃO DE USUÁRIO" com
+            # hCaptcha ("Sou humano" + desafio de imagem tipo "selecione os
+            # animais que nascem de ovos"). Resolver captcha
+            # automaticamente está fora de questão (viola os termos do
+            # hCaptcha/portal e não é o tipo de automação deste projeto).
+            # O download PRECISA do clique humano acima — não dá para
+            # substituir por page.expect_download() sozinho.
 
         browser.close()
 

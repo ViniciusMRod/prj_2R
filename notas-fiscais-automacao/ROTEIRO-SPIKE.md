@@ -10,6 +10,14 @@ Este roteiro é para SAIR de lá com `preencher_nota()` (em
 `src/robo_emissao.py`) já funcionando contra os seletores reais, não só com
 anotações para transcrever depois.
 
+**Atualização (07-08/08): boa parte do fluxo já está mapeada.** O 2R
+mandou dois vídeos do preenchimento real na tela. As tabelas abaixo já
+vêm com o NOME do campo confirmado — falta só o SELETOR (id/name/texto
+exato pro Playwright), não mais "descobrir se o campo existe". Ver
+README, seção "Rodada 4", para o achado mais importante: **o download do
+PDF pós-emissão passa por hCaptcha** — não dá pra automatizar, precisa de
+clique humano ali também, não só no "Emitir".
+
 ---
 
 ## 0. Preparação — antes de ir
@@ -98,11 +106,13 @@ automatizado, antes de confiar o robô para rodar sem supervisão.
 ## 1. Login (o teste mais importante — fazer primeiro, sempre)
 
 - Abra a URL de login (Plano A: pelo próprio `playwright codegen`; Plano B:
-  no navegador normal dela) no notebook dela.
+  no navegador normal dela) no notebook dela. Tela de entrada tem dois
+  botões: "Acessar com certificado digital" e "Acessar via GOV.BR" — usar
+  o primeiro.
 - Confirme: autentica sozinho, ou ainda aparece um seletor de certificado do
-  Windows para escolher/confirmar? A analista já disse que não pede mais
-  senha — mas o comportamento exato do Chromium automatizado (Plano A) ainda
-  não foi observado.
+  Windows para escolher/confirmar? No vídeo do fluxo manual, do clique até
+  o Dashboard carregado foram uns 5 segundos, sem prompt de senha visível
+  — mas isso ainda não foi testado com o Chromium do Playwright (Plano A).
 - Anote: quantos cliques até logar; quanto tempo leva; se aparece algum
   aviso de segurança do navegador.
 - **Se isso não funcionar de jeito nenhum no Plano A**, é o único cenário
@@ -112,17 +122,19 @@ automatizado, antes de confiar o robô para rodar sem supervisão.
 
 ---
 
-## 2. Tomador do serviço
+## 2. Pessoas (emitente / tomador)
 
 Com uma nota de teste (ou observando a analista abrir uma real):
 
-| Campo | Seletor encontrado | Observação |
+| Campo confirmado | Seletor a capturar | Observação |
 |---|---|---|
-| Tipo de emissão ("Emissão Completa") | | |
-| Campo CNPJ/CPF | | |
+| "Você irá emitir esta NFS-e como?" Prestador/Tomador/Intermediário | | sempre Prestador |
+| Botão "Exibir detalhes do emitente" | | expansível, opcional |
+| "Onde está localizado o estabelecimento/domicílio?" Tomador não informado/Brasil/Exterior | | sempre Brasil |
+| Campo CPF/CNPJ do tomador | | |
 | Botão da lupinha (busca o cadastro) | | |
-| Razão social (deve vir readonly) | | confirmar que vem preenchida sozinha |
-| CEP / endereço | | **já confirmado como automático** (2R, 31/07) — só confirme visualmente que realmente vem preenchido, sem precisar digitar nada |
+| Razão social (vem readonly) | | confirmar que vem preenchida sozinha |
+| CEP / endereço | | **já confirmado automático** (2R, 31/07 — vídeo confirma visualmente) |
 
 - Teste com um **CPF**, não só CNPJ — 6 empresas da planilha são pessoa
   física. Confirme se a busca automática (razão social + endereço) também
@@ -132,51 +144,50 @@ Com uma nota de teste (ou observando a analista abrir uma real):
 
 ## 3. Serviço
 
-| Campo | Seletor encontrado | Observação |
+| Campo confirmado | Seletor a capturar | Observação |
 |---|---|---|
-| Código de tributação (17.01.01) | | é lista suspensa ou texto livre? |
-| Descrição do serviço | | |
-| Item NBS | | o rótulo em `NBS_ITEM_ROTULO` no código veio do passo a passo textual, nunca confirmado contra a tela |
+| "É caso de imunidade, exportação de serviço ou não incidência do ISSQN?" Não/Sim | | **campo novo, não documentado antes do vídeo** — sempre Não |
+| Código de Tributação Nacional (17.01.01) | | dropdown pesquisável |
+| "Município de incidência do ISSQN" | | readonly, auto-preenchido |
+| Descrição do Serviço | | |
+| Item NBS | | rótulo em `NBS_ITEM_ROTULO` veio do passo a passo textual, ainda não confirmado contra a tela |
 
 ---
 
-## 4. Valor
+## 4. Valores
 
-| Campo | Seletor encontrado | Observação |
+| Campo confirmado | Seletor a capturar | Observação |
 |---|---|---|
-| Campo de valor | | |
-
-- Formato aceito: ponto ou vírgula decimal? O código hoje envia com ponto
-  (`page.fill("#valorNota", "375.13")`) — TODO marcado em `preencher_nota`.
-  Digite um valor de teste com centavos (ex.: `375,13`) e confira se o
-  portal interpreta certo antes de fechar esse ponto.
+| "Valor do serviço prestado" | | **formato CONFIRMADO com vírgula** ("1.595,00") — já corrigido no código |
 
 ---
 
-## 5. Retenção de ISS — o campo mais importante de capturar certo
+## 5. Tributação Municipal / Retenção de ISS — a parte mais rica
 
-| Campo | Seletor encontrado | Observação |
+| Campo confirmado | Seletor a capturar | Observação |
 |---|---|---|
-| Toggle "Retenção de ISS? Sim/Não" | | |
-| Campo de alíquota (se aparecer) | | |
-| BC ISSQN / ISSQN Apurado (campos calculados) | | só para conferência visual |
+| "Retenção do ISSQN pelo Tomador ou pelo Intermediário?" Sim/Não | | |
+| "Informe abaixo por quem o imposto será retido" — Retido pelo Tomador / Retido pelo Intermediário | | **campo novo**: é escolha de QUEM retém, não um Sim/Não simples. Sempre "pelo Tomador" nas 274 |
+| "Informe o valor da alíquota" (%) | | **CONFIRMADO editável**, formato vírgula ("4,19"). Portal avisa piso de 1,8% para ME/EPP no Simples Nacional |
+| "Este serviço está amparado por algum benefício municipal?" Não/Sim | | **campo novo** — sempre Não |
+| "Será aplicado algum tipo de Dedução/Redução à base de cálculo do ISSQN?" Não/Sim | | **campo novo** — sempre Não |
+| BC ISSQN / ISSQN Apurado (calculados) | | só para conferência visual contra `calcular_iss()` |
 
-- Marque "SIM" numa nota de teste e observe EXATAMENTE quais campos
-  aparecem ou mudam na tela.
-- A alíquota é **digitável** ou vem sozinha do cadastro do tomador?
-  (`aliquota_iss` em `NotaFiscal` assume que é preciso informar — se o
-  portal já traz do cadastro, o código de `preencher_nota` precisa mudar.)
+- Marque "SIM" numa nota de teste e confirme que os 4 campos novos acima
+  aparecem exatamente nessa ordem.
 - Compare o que a tela calcula com `calcular_iss()` do código — o caso real
   já confirmado é R$ 243,00 × 4,19% = R$ 10,18 de ISSQN, líquido R$ 232,82.
 
 ---
 
-## 6. Regime tributário / PIS-COFINS
+## 6. Tributação Federal / Valor aproximado dos tributos
 
-| Campo | Seletor encontrado | Observação |
+| Campo confirmado | Seletor a capturar | Observação |
 |---|---|---|
-| Regime de apuração (Simples Nacional) | | |
-| Situação tributária PIS/COFINS | | hoje o código usa `select_option("#situacaoPisCofins", "00")` |
+| "Situação Tributária do PIS/COFINS" | | combobox pesquisável, sempre "00 - Nenhum" |
+| "Tipo de retenção do PIS/COFINS/CSLL" | | **campo novo**, sempre "PIS/COFINS/CSLL Não Retidos" |
+| IRRF / Contribuições Sociais-Retidas / Contribuição Previdenciária-Retida | | sempre vazios nos casos vistos |
+| "Valor aproximado dos tributos" (Federal/Estadual/Municipal %) | | **NÃO CONFIRMADO se é por nota ou config de conta** — apareceu já preenchido (0,90/0,10/0,00) no vídeo. Perguntar/observar se essa tela aparece toda vez |
 
 Seletores finais antes da tela de revisão.
 
@@ -189,11 +200,21 @@ Seletores finais antes da tela de revisão.
   "Emitir" e observe o passo 8.
 - Se for só uma nota de teste fictícia: **pare aqui, não emita.**
 
-## 8. Depois de emitir (só em nota real)
+## 8. Depois de emitir (só em nota real) — hCaptcha confirmado aqui
 
-- Como o PDF é entregue: download automático? aparece um botão? qual nome
-  de arquivo o portal sugere?
-  (resolve o TODO de `page.expect_download` em `emitir_lote`, no código)
+**Já sabemos o que acontece** (vídeo do 2R, 07/08): a tela de sucesso tem
+botões "Baixar XML" / "Baixar DANFSe" / "Visualizar NFS-e" / "NFS-e
+emitidas" / "Nova NFS-e". Clicar em baixar abre um modal "VALIDAÇÃO DE
+USUÁRIO" com **hCaptcha** — checkbox "Sou humano" + desafio de imagem
+("selecione os animais que nascem de ovos", ou similar).
+
+- **Não é possível automatizar o download** — resolver captcha
+  automaticamente está fora de questão (viola termos do hCaptcha/portal).
+  O `input()` em `emitir_lote` já foi ajustado para pedir o clique humano
+  também nessa etapa, não só no Emitir.
+- O que ainda falta observar: o captcha aparece **sempre** que se clica em
+  baixar, ou só às vezes? E qual nome de arquivo o navegador sugere ao
+  salvar o DANFSe (para comparar com `montar_nome_pdf`)?
 
 ---
 
@@ -205,15 +226,20 @@ Mapa de qual placeholder em `preencher_nota()` (arquivo
 | Hoje (placeholder no código) | Campo real | Seletor capturado no spike |
 |---|---|---|
 | `page.click("text=Emissão Completa")` | tipo de emissão | |
+| `page.click("#casoImunidadeExportacao_nao")` | imunidade/exportação/não incidência | |
 | `page.fill("#documentoTomador", ...)` | CNPJ/CPF do tomador | |
 | `page.click(f"text={CODIGO_TRIBUTACAO_NACIONAL}")` | código de serviço 17.01.01 | |
 | `page.fill("#descricaoServico", ...)` | descrição do serviço | |
 | `page.click(f"text={NBS_ITEM_ROTULO}")` | item NBS | |
-| `page.fill("#valorNota", ...)` | valor da nota | |
+| `page.fill("#valorNota", ...)` | valor da nota (vírgula, já corrigido) | |
 | `page.click("#retencaoIssSim")` / `page.click("#retencaoIssNao")` | toggle retenção ISS | |
-| `page.fill("#aliquotaIss", ...)` | alíquota (se editável) | |
+| `page.click("#retidoPeloTomador")` | por quem é retido | |
+| `page.fill("#aliquotaIss", ...)` | alíquota (editável, vírgula) | |
+| `page.click("#beneficioMunicipal_nao")` | benefício municipal | |
+| `page.click("#deducaoReducao_nao")` | dedução/redução | |
 | `page.click(f"text={REGIME_APURACAO_TRIBUTOS.upper()}")` | regime tributário | |
 | `page.select_option("#situacaoPisCofins", "00")` | situação PIS/COFINS | |
+| `page.select_option("#tipoRetencaoPisCofinsCsll", "NAO_RETIDOS")` | tipo de retenção PIS/COFINS/CSLL | |
 
 Com a tabela preenchida, é essencialmente um find-and-replace dentro de
 `preencher_nota()` — a lógica em volta (validações, cálculo do ISS,
@@ -240,15 +266,16 @@ tentar adivinhar um seletor equivalente de cabeça.
 
 ## Enquanto estiver lá, aproveitar para confirmar ao vivo
 
-Bloco 1 de perguntas já foi respondido por texto (endereço automático,
-certificado sem senha) — o que resta é mais rápido ver acontecendo do que
-perguntar por WhatsApp:
+Bloco 1 respondido por texto e boa parte da Rodada 4 já fechada por vídeo
+— o que resta é mais rápido ver acontecendo do que perguntar por WhatsApp:
 
 - Os rascunhos parados no portal (pergunta 14 do Bloco 2) — quantos tem
   agora, o que a analista faz com eles.
-- "Valor aproximado dos tributos" (pergunta 16) — muda de nota para nota?
-- O grupo das ~50 empresas com antecedência de 10-12 dias — se a coluna
-  nova já estiver na planilha nesse momento, conferir o nome/formato dela.
+- "Valor aproximado dos tributos" — essa tela aparece em TODA nota, ou só
+  configura uma vez por conta? (ver seção 6)
+- O hCaptcha do download — aparece sempre, ou só em algumas notas?
+- Vencimento vazio de `AUTO TECH SOLUCOES LTDA` na `v03` (regressão da
+  célula mesclada) — já pode avisar a analista ali mesmo.
 
 ---
 

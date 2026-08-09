@@ -185,24 +185,121 @@ Novas nesta rodada:
   dígito de CNPJ ou valor; o preenchimento script-a-partir-de-dado-validado
   não erra o que já passou pelo validador. Avaliar depois do spike.
 
+## Pesquisa externa — projetos NF-e no GitHub (08/2026)
+
+Estudo comparativo de libs open-source de emissão fiscal (PyNFe, ACBr,
+sped-nfe, NFeWizard, APIs Focus NFe/NFe.io) — arquivo completo em
+`Vini_Vault/Project_2R/NotasFiscais/analise-automacao/
+compass_artifact_wf-2385e0db-c06a-5799-9bc7-bb160b15777d_text_markdown.md`.
+
+**Veredito: mismatch de sistema.** Estudo cobre NF-e (SEFAZ estadual,
+modelo 55) e NFS-e formato antigo ABRASF (por município). Nosso projeto é
+NFS-e **Padrão Nacional** (ADN/DPS, `nfse.gov.br`) — protocolo diferente.
+Nenhuma lib do estudo fala ADN/DPS. Arquitetura RPA-sobre-UI **não muda**.
+
+O que aproveitou:
+
+- **CNPJ alfanumérico** — produção nacional desde 06/07/2026. Ver risco
+  atualizado abaixo: `validar_planilha.py` hoje mastigaria isso silencioso.
+- **IBS/CBS na NFS-e — risco fechado, não aberto.** Confirmado: pra NFS-e
+  o campo é **facultativo** em 2026 (NF-e modelo 55 é que é obrigatório
+  desde 03/08). E pra empresa do **Simples Nacional** — regime do
+  prestador — **zero obrigação até 2027**. Não entra no backlog.
+- **Ambiente de homologação NFS-e Nacional** — confirmado que existe pro
+  **webservice** (ADN/DPS). Não confirmado se existe URL de homologação
+  pra **UI do Emissor Nacional** (o que o robô automatiza). Checar no
+  spike, antes de usar nota real como fallback (ROTEIRO-SPIKE.md).
+- **Lição geral (bug real do ecossistema sped-nfe, issue #941):** ambiente
+  homolog/produção confundido por flag ambígua. Robô precisa deixar
+  produção vs teste inequívoco, nunca uma flag que engana.
+- **Confirma decisão já tomada:** não construir núcleo de emissão sobre
+  MCP/API de terceiro — caso real citado no estudo, `mcp-nota-fiscal`
+  ficou inviável quando a Nuvem Fiscal desativou em 31/07/2026.
+
+## Rodada 4 — vídeos e PDFs novos (07-08/08)
+
+O 2R mandou 2 vídeos do fluxo real de emissão, 2 PDFs de notas novas e
+`PLANILHA ATUALIZADA_v03.xlsx`. Verificado abrindo os arquivos, não só
+lendo a mensagem — vídeos processados via `ffmpeg` (contact sheet +
+frames em pontos específicos, sem transcrever áudio).
+
+**Achado que muda o desenho da Fase 2 — hCaptcha no download.** Depois de
+emitir, a tela tem "Baixar XML" / "Baixar DANFSe" / "Visualizar NFS-e" /
+"NFS-e emitidas" / "Nova NFS-e". Clicar em baixar abre um modal
+"VALIDAÇÃO DE USUÁRIO" com **hCaptcha** (checkbox "Sou humano" + desafio
+de imagem tipo "selecione os animais que nascem de ovos"). **Não dá para
+automatizar isso** — nem deveríamos tentar (viola os termos do
+hCaptcha). O clique humano do "semi-automatizado" já cobria o Emitir;
+agora cobre o Emitir **e** o Baixar. Documentado em `robo_emissao.py`.
+
+**Login: dois métodos, mais rápido do que parecia.** Tela de entrada tem
+"Acessar com certificado digital" e "Acessar via GOV.BR". No vídeo, do
+clique no link até o Dashboard carregado foram ~5 segundos — sem prompt
+de senha visível, bate com o que a analista já tinha dito.
+
+**Separador decimal — CONFIRMADO vírgula, risco fechado.** Valor
+"1.595,00", alíquota "4,19" — todos os campos numéricos do portal usam
+vírgula. `preencher_nota()` corrigido (usava ponto).
+
+**Alíquota mínima real — 1,8%, não 2%.** O próprio portal avisa: "Para o
+prestador de serviço ME/EPP... é permitido informar alíquota mínima de
+1,8%". `ALIQUOTA_ISS_MINIMA_PLAUSIVEL` corrigida nos dois programas.
+
+**Campos da tela de retenção — mais do que o esperado, todos
+confirmados:** "Retido pelo Tomador" ou "pelo Intermediário" (é escolha
+de quem retém, não Sim/Não simples), "amparado por benefício municipal?"
+Não/Sim, "Dedução/Redução na base do ISSQN?" Não/Sim, e na aba federal
+"Tipo de retenção do PIS/COFINS/CSLL" (visto sempre "Não Retidos") — nome
+de campo que não existia em nenhuma documentação anterior. Aba Serviço
+também tem uma pergunta antes do código de tributação: "é caso de
+imunidade, exportação ou não incidência do ISSQN?" — sempre "Não".
+`preencher_nota()` atualizado com os 5 campos.
+
+**RUDINEI TOZI — fechado.** PDF real da nota "Fazenda Tozi" (CPF
+708.872.763-34, R$ 260,00) confirma: são notas separadas de fato, o
+próprio 2R já emite assim.
+
+**`COMPETÊNCIA:` — fechado.** PDF real da FAPLAST mostra o texto exato:
+"COMPETÊNCIA: NFS-E REFERENTE AOS SERVIÇOS REALIZADOS NO MÊS DE JULHO DE
+2026" — mês por extenso, referente ao mês anterior à emissão. Já dá para
+montar esse texto em código quando o agrupador de lote existir.
+
+**Coluna de antecedência — chegou.** `v03` tem
+`EMITIR 12 DIAS ANTES DO VENCIMENTO:`, 45 empresas marcadas (perto do
+"~50" combinado). `validar_planilha.py` já detecta e conta essa coluna
+(nome com número de dias pode mudar, busca por padrão, não texto fixo).
+
+**Regressão nova, não pedida — reportar ao 2R.** Ao editar a planilha pra
+tirar a linha de título e incluir a coluna nova, a célula mesclada que
+resolvia o vencimento de `AUTO TECH SOLUCOES LTDA` (D20:D21 na v02) não
+sobreviveu — em `v03` o vencimento dessa linha está vazio de verdade, não
+é mais problema de leitura. Confirmado inspecionando a planilha
+diretamente. Validador acusa `VENCIMENTO_AUSENTE` corretamente.
+
+**Aberto, não confirmado:** "Valor aproximado dos tributos"
+(Federal/Estadual/Municipal %) apareceu já preenchido no vídeo — parece
+ser configuração da CONTA do emitente, não campo repetido por nota.
+Confirmar no spike.
+
 ## Bloqueante — pedir ao 2R antes de construir a Fase 2
 
 Bloco 1 (7 perguntas) respondido em 31/07. O que sobra:
 
-- [ ] **NOVO — coluna/sinalização das ~50 empresas com antecedência de
-      10-12 dias.** O 2R confirmou o grupo e vai marcar direto na
-      planilha existente, mas a coluna ainda não veio em `v02`. Sem ela,
-      o agrupador de lote por vencimento (ainda não escrito) não sabe
-      distinguir esse grupo do padrão de 3-5 dias.
-- [ ] Confirmar que o CPF repetido em L161/L162 são 2 notas mesmo
-      (segue como AVISO, não bloqueia — mas vale fechar)
-- [ ] Como a `COMPETÊNCIA:` das 3 notas (L35, L36, L37) é preenchida
+- [ ] Vencimento vazio de verdade em `AUTO TECH SOLUCOES LTDA` na `v03`
+      (regressão da célula mesclada — ver Rodada 4 acima)
 - [ ] Tomadores **pessoa física**: o portal localiza cadastro por CPF?
 - [ ] Raiz das pastas onde os PDFs são salvos e padrão de nome
 - [ ] Os 4 cadastros "MATRIZ E FILIAIS" (L233, L235, L236, L237) são uma
       nota só ou várias? L233 é a maior nota da planilha (R$ 2.890)
 
-Resolvidos no Bloco 1 (31/07):
+Resolvidos no Bloco 1 (31/07) e na Rodada 4 (07-08/08):
+
+- [x] ~~CPF repetido em L161/L162, são 2 notas?~~ — confirmado por PDF
+      real da nota "Fazenda Tozi"
+- [x] ~~Como a `COMPETÊNCIA:` é preenchida?~~ — confirmado por PDF real
+      da FAPLAST, texto exato documentado acima
+- [x] ~~Coluna das ~50 empresas com antecedência maior~~ — chegou na
+      `v03`, 45 marcadas
 
 - [x] ~~Correções cadastrais: L52, L105/L106, L143, L228~~ — as 4
       vieram certas, ver tabela da rodada 3 acima
@@ -254,11 +351,15 @@ Resolvidos no Bloco 1 (31/07):
   resolve a partir do CNPJ com o nome da planilha é a única checagem que
   fecha a classe "CNPJ válido no DV mas de outra empresa" — nenhum
   validador offline consegue.
-- **Separador decimal**: os campos são preenchidos com ponto ("1595.00",
-  "4.19"). Se o portal usar máscara pt-BR, o ponto vira separador de
-  milhar. Só verificável contra o DOM autenticado.
-- **CNPJ alfanumérico** (IN RFB 2.229/2024): hoje seria classificado como
-  truncado. Não há nenhum na planilha; o risco é um tomador novo.
+- ~~Separador decimal~~ — **fechado** (Rodada 4): confirmado vírgula por
+  vídeo real, `preencher_nota()` corrigido.
+- **CNPJ alfanumérico** — produção nacional desde 06/07/2026 (confirmado
+  via pesquisa externa, 08/2026). `so_digitos()` em `validar_planilha.py`
+  descarta letra e mastiga o documento SILENCIOSO — não cai limpo em
+  "truncado", cai em contagem de dígito errada e mensagem enganosa.
+  Nenhum caso na planilha atual (primeiro CNPJ alfanumérico do país só
+  saiu 31/07/2026). Backlog: `classificar_documento` detectar letra e
+  rejeitar com mensagem própria, não tratar como truncamento numérico.
 - **Degradação silenciosa da planilha** é o maior risco pós-entrega: 128
   linhas foram acrescentadas por processo manual não auditado, e um
   defeito conhecido (VDC) sobreviveu a um ciclo inteiro de correção.
